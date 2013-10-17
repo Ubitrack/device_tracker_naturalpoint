@@ -1,0 +1,28 @@
+import glob
+import os.path
+
+# import variables from other scons files
+Import( '*' )
+
+
+# this driver requires the asio library
+if not boost_have_asio:
+	print "Not building the NatNet driver: boost asio not available"
+else:
+	env = masterEnv.Clone()
+	# take driver name from directory name, replace if you don't like the result
+	driverName = os.path.basename( Dir( '.' ).srcnode().abspath )
+
+	# automatically glob files
+	headers = globSourceFiles( '*.h' )
+	sources = globSourceFiles( '*.cpp' )
+
+	# append driver specific build options here
+	natnet_options = mergeOptions( utcore_options, utdataflow_options, boost_options, tinyxml_options, log4cpp_options )
+	env.AppendUnique( **natnet_options )	
+
+	# compile driver
+	setupSingleComponentBuild(env, sources, driverName,'natnet')
+	
+	# also create a visual studio project for the driver
+	createVisualStudioProject(env, sources, headers, 'natnet')

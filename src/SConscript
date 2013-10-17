@@ -1,0 +1,19 @@
+import glob
+
+Import( '*' )
+
+# create a common build environment for all drivers
+utComponentEnv = masterEnv.Clone()
+
+utComponentEnv.AppendUnique( **mergeOptions( utdataflow_all_options ) )
+utComponentEnv.AppendUnique( LIBS = boost_libs( [ 'thread' ] ) )
+utComponentEnv.Replace( no_import_lib = 1 )
+
+Export( 'utComponentEnv' )
+
+# glob all SConscript files in subdirectories
+sconsfiles = globSourceFiles( "*/SConscript" )
+# recurse into subdirectories and export driver build environment
+SConscript( sconsfiles, [ 'utComponentEnv' ] )
+success = True
+Return('success')
