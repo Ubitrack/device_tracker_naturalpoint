@@ -43,7 +43,19 @@
 #include <string>
 #include <cstdlib>
 
-#include "UdpSocketSingleton.h"
+
+// on windows, asio must be included before anything that possible includes windows.h
+// don't ask why.
+#include <boost/asio.hpp>
+
+#include <iostream>
+#include <map>
+#include <boost/array.hpp>
+#include <boost/utility.hpp>
+#include <boost/shared_ptr.hpp>
+#include <boost/function.hpp>
+#include <boost/bind.hpp>
+#include <boost/thread.hpp>
 
 #include <utDataflow/PushSupplier.h>
 #include <utDataflow/Component.h>
@@ -52,6 +64,18 @@
 #include <utMeasurement/TimestampSync.h>
 
 namespace Ubitrack { namespace Drivers {
+
+
+/// internal message buffer class, as defined in NatNet SDK
+struct sPacket;
+
+/// decoded definition of tracked objects
+struct ModelDef;
+
+/// decoded frame of tracked data
+struct FrameData;
+
+
 
 using namespace Dataflow;
 
@@ -62,7 +86,7 @@ class NatNetComponent;
  * Module key for natnet.
  * Represents the port number on which to listen.
  */
-MAKE_NODEATTRIBUTEKEY_DEFAULT( NatNetModuleKey, int, "NatNet", "natnetPort", 5000 );
+MAKE_NODEATTRIBUTEKEY_DEFAULT( NatNetModuleKey, std::string, "NatNet", "serverName", "natnet.local" );
 
 
 /**
@@ -72,24 +96,18 @@ MAKE_NODEATTRIBUTEKEY_DEFAULT( NatNetModuleKey, int, "NatNet", "natnetPort", 500
 class NatNetComponentKey
 {
 public:
-    enum TargetType { target_6d, target_6d_flystick, target_6d_measurement_tool, target_6d_measurement_tool_reference, target_finger, target_3dcloud };
-
-	enum FingerType { finger_hand, finger_thumb, finger_index, finger_middle };
-	enum FingerSide { side_left = 0, side_right = 1 };
+    enum TargetType { target_6d, target_3dcloud };
 
 	// still ugly refactor natnet driver sometime..
 	// construct from configuration
 	NatNetComponentKey( boost::shared_ptr< Graph::UTQLSubgraph > subgraph )
 	: m_body( 0 )
 	, m_targetType( target_6d )
-	, m_fingerSide ( side_left )
 	{
 		Graph::UTQLSubgraph::EdgePtr config;
 
 	  if ( subgraph->hasEdge( "NatNetToTarget" ) )
 		  config = subgraph->getEdge( "NatNetToTarget" );
-	  else if ( subgraph->hasEdge( "fingerHandOutput" ) )
-		  config = subgraph->getEdge( "fingerHandOutput" );
 
 	  if ( !config )
 	  {
@@ -110,52 +128,10 @@ public:
 	  {
 	      if ( typeString == "6d" )
 			  m_targetType = target_6d;
-	      else if ( typeString == "6df" )
-			  m_targetType = target_6d_flystick;
-	      else if ( typeString == "6dmt" )
-			  m_targetType = target_6d_measurement_tool;
-	      else if ( typeString == "6dmtr" )
-			  m_targetType = target_6d_measurement_tool_reference;
 	      else if ( typeString == "3dcloud" )
 		  {
 			  m_targetType = target_3dcloud;
 			  m_body = 0;
-		  }
-	      else if ( typeString == "finger" )
-		  {
-			  m_targetType = target_finger;
-
-			  /*
-			  Graph::UTQLSubgraph::NodePtr configNode = config->m_Target.lock();
-
-			  std::string fingerString = configNode->getAttributeString( "finger" );
-
-			  if (fingerString.length() == 0)
-				  UBITRACK_THROW( "NatNet finger target without finger id" );
-
-			  if ( fingerString == "hand" )
-				  m_fingerType = finger_hand;
-			  else if ( fingerString == "thumb" )
-				  m_fingerType = finger_thumb;
-			  else if ( fingerString == "index" )
-				  m_fingerType = finger_index;
-			  else if ( fingerString == "middle" )
-				  m_fingerType = finger_middle;
-			  else
-				  UBITRACK_THROW( "NatNet finger target with unknown finger type: " + fingerString );
-			  */
-
-			  std::string fingerSideString = config->getAttributeString( "fingerSide" );
-			  if (fingerSideString.length() == 0)
-				  UBITRACK_THROW( "NatNet finger target without finger side" );
-
-			  if ( fingerSideString == "left" )
-				  m_fingerSide = side_left;
-			  else if ( fingerSideString == "right" )
-				  m_fingerSide = side_right;
-			  else
-				  UBITRACK_THROW( "NatNet finger target with unknown finger side: " + fingerSideString );
-
 		  }
 	      else
 			  UBITRACK_THROW( "NatNet target with unknown target type: " + typeString );
@@ -167,21 +143,12 @@ public:
 	NatNetComponentKey( int a )
 		: m_body( a )
         , m_targetType( target_6d )
-		, m_fingerSide ( side_left )
  	{}
 
     // construct from body number and target type
     NatNetComponentKey( int a, TargetType t )
         : m_body( a )
         , m_targetType( t )
-		, m_fingerSide( side_left )
-    {}
-
-	// construct from body number and target type and finger type
-    NatNetComponentKey( int a, TargetType t, FingerSide s )
-        : m_body( a )
-        , m_targetType( t )
-		, m_fingerSide( s )
     {}
 
 	int getBody() const
@@ -198,10 +165,7 @@ public:
 	bool operator<( const NatNetComponentKey& b ) const
     {
         if ( m_targetType == b.m_targetType )
-			if ( m_fingerSide == b.m_fingerSide )
-				return m_body < b.m_body;
-			else
-				return m_fingerSide < b.m_fingerSide;
+			return m_body < b.m_body;
         else
             return m_targetType < b.m_targetType;
     }
@@ -209,7 +173,6 @@ public:
 protected:
 	int m_body;
 	TargetType m_targetType;
-	FingerSide m_fingerSide;
 };
 
 
@@ -235,18 +198,60 @@ public:
     void HandleReceive (const boost::system::error_code err, size_t length);
 
 protected:
-    boost::shared_ptr< UdpSocketSingleton > m_pSocket;
+    //boost::shared_ptr< UdpSocketSingleton > m_pSocket;
 
     // Recive data. Do not touch from outside of async network thread
-    enum { max_receive_length = 10240, receive_buffer_size = 10242 };
-    char receive_data[receive_buffer_size];
-	boost::asio::ip::udp::endpoint sender_endpoint;
+    //enum { max_receive_length = 10240, receive_buffer_size = 10242 };
+    //char receive_data[receive_buffer_size];
+	//boost::asio::ip::udp::endpoint sender_endpoint;
 
 	Measurement::TimestampSync m_synchronizer;
 
 private:
-    void trySendPose( int id, NatNetComponentKey::TargetType type, double qual, double* rot, double* mat, Ubitrack::Measurement::Timestamp ts );
-	void trySendPose( boost::shared_ptr< std::vector< Ubitrack::Math::Vector < 3 > > > cloud, Ubitrack::Measurement::Timestamp ts );
+    void trySendPose( int id, NatNetComponentKey::TargetType type, RigidData& rdata, Ubitrack::Measurement::Timestamp ts );
+	void trySendPose( int id, NatNetComponentKey::TargetType type, PointCloudData& cdata, Ubitrack::Measurement::Timestamp ts );
+
+    boost::asio::ip::udp::endpoint server_endpoint;
+    boost::asio::ip::udp::socket* command_socket;
+    boost::asio::ip::udp::socket* data_socket;
+
+	/** thread running the IO service */
+	boost::shared_ptr< boost::thread > m_pNetworkThread;
+
+    sPacket* recv_command_packet;
+    boost::asio::ip::udp::endpoint recv_command_endpoint;
+
+    sPacket* recv_data_packet;
+    boost::asio::ip::udp::endpoint recv_data_endpoint;
+
+    void start_command_receive();
+    void handle_command_receive(const boost::system::error_code& error,
+            std::size_t bytes_transferred);
+
+    void start_data_receive();
+    void handle_data_receive(const boost::system::error_code& error,
+            std::size_t bytes_transferred);
+
+    void decodeFrame(const sPacket& data);
+    void decodeModelDef(const sPacket& data);
+
+    virtual void processFrame(const FrameData* data);
+    virtual void processModelDef(const ModelDef* data);
+
+    std::string serverString;
+    unsigned char serverVersion[4]; // sending app's version [major.minor.build.revision]
+    unsigned char natNetVersion[4]; // sending app's NatNet version [major.minor.build.revision]
+
+    std::map<int, std::string> idNameMap;
+
+    bool serverInfoReceived;
+    bool modelInfoReceived;
+
+    static boost::asio::io_service& get_io_service();
+    static boost::asio::ip::udp::resolver& get_resolver();
+
+    std::string serverName;
+    std::string clientName;
 };
 
 
@@ -256,34 +261,164 @@ private:
 
  * @TODO: make this two separate components for 6d/3dlist
  */
-class NatNetComponent
-	: public NatNetModule::Component
-{
+class NatNetComponent : public NatNetModule::Component {
 public:
 	/** constructor */
 	NatNetComponent( const std::string& name, boost::shared_ptr< Graph::UTQLSubgraph > subgraph, const NatNetComponentKey& componentKey, NatNetModule* pModule )
 		: NatNetModule::Component( name, componentKey, pModule )
-		, m_port( "NatNetToTarget", *this )
-		, m_cloudPort( "3DOutput", *this )
+		, m_port( "Output", *this )
 	{}
-	
+
 	/** destructor */
 	~NatNetComponent();
+
+protected:
+	// the port is the only member
+	int item_id;
+
+
+};
+
+template< class T >
+class NatNetReceiverComponent : public NatNetComponent {
 
 	/** returns the port for usage by the module */
 	PushSupplier< Ubitrack::Measurement::Pose >& getPort()
 	{ return m_port; }
 
+protected:
+	// the port is the only member
+	PushSupplier< Ubitrack::Measurement::Pose > m_port;
+
+
+};
+
+class NatNetPoseComponent
+	: public NatNetComponent
+{
+public:
+	/** constructor */
+	NatNetPoseComponent( const std::string& name, boost::shared_ptr< Graph::UTQLSubgraph > subgraph, const NatNetComponentKey& componentKey, NatNetModule* pModule )
+		: NatNetModule::Component( name, componentKey, pModule )
+		, m_port( "Output", *this )
+	{}
+	
+	/** destructor */
+	~NatNetPoseComponent();
+
 	/** returns the port for usage by the module */
-	PushSupplier< Ubitrack::Measurement::PositionList >& getCloudPort()
-	{ return m_cloudPort; }
+	PushSupplier< Ubitrack::Measurement::Pose >& getPort()
+	{ return m_port; }
 
 protected:
 	// the port is the only member
 	PushSupplier< Ubitrack::Measurement::Pose > m_port;
-	PushSupplier< Ubitrack::Measurement::PositionList > m_cloudPort;
+};
+
+class NatNetPointcloudComponent
+	: public NatNetComponent
+{
+public:
+	/** constructor */
+	NatNetPointcloudComponent( const std::string& name, boost::shared_ptr< Graph::UTQLSubgraph > subgraph, const NatNetComponentKey& componentKey, NatNetModule* pModule )
+		: NatNetModule::Component( name, componentKey, pModule )
+		, m_port( "Output", *this )
+	{}
+
+	/** destructor */
+	~NatNetPointcloudComponent();
+
+	/** returns the port for usage by the module */
+	PushSupplier< Ubitrack::Measurement::Pose >& getPort()
+	{ return m_port; }
+
+protected:
+	// the port is the only member
+	PushSupplier< Ubitrack::Measurement::PositionList > m_port;
 
 };
+
+
+
+struct PointCloudDef
+{
+    const char* name;
+    int nMarkers;
+    struct Marker
+    {
+        const char* name;
+    };
+    Marker* markers;
+};
+
+struct RigidDef
+{
+    const char* name;
+    int ID;
+    int parentID;
+    Ubitrack::Math::Vector < 3 > offset;
+};
+
+struct SkeletonDef
+{
+    const char* name;
+    int ID;
+    int nRigids;
+    RigidDef* rigids;
+};
+
+struct ModelDef
+{
+    int nPointClouds;
+    PointCloudDef* pointClouds;
+    int nRigids;
+    RigidDef* rigids;
+    int nSkeletons;
+    SkeletonDef* skeletons;
+};
+
+struct PointCloudData
+{
+    const char* name;
+    int nMarkers;
+    const Ubitrack::Math::Vector < 3 >* markersPos;
+};
+
+struct RigidData
+{
+    int ID;
+    Ubitrack::Math::Vector < 3 > pos;
+    Ubitrack::Math::Quaternion rot;
+    int nMarkers;
+    const Ubitrack::Math::Vector < 3 >* markersPos;
+    const int* markersID; // optional (2.0+)
+    const float* markersSize; // optional (2.0+)
+    float meanError; // optional (2.0+)
+};
+
+struct SkeletonData
+{
+    int ID;
+    int nRigids;
+    RigidData* rigids;
+};
+
+struct FrameData
+{
+    int frameNumber;
+    int nPointClouds;
+    PointCloudData* pointClouds;
+    int nRigids;
+    RigidData* rigids;
+    int nSkeletons;
+    SkeletonData* skeletons;
+
+    float latency;
+    // unidentified markers
+    int nOtherMarkers;
+    const Ubitrack::Math::Vector < 3 >* otherMarkersPos;
+};
+
 
 } } // namespace Ubitrack::Drivers
 
