@@ -25,9 +25,9 @@
 /**
  * @ingroup driver_components
  * @file
- * ART driver
+ * NatNet driver
  * This file contains the driver component to
- * talk to the ART infrared tracking system.
+ * talk to the NatNet infrared tracking system.
  *
  * The driver is build from one module to handle
  * the sockets communicationa and compontens for
@@ -37,8 +37,8 @@
  *
  * @author Manuel Huber <huberma@in.tum.de>
  */
-#ifndef __ArtModule_h_INCLUDED__
-#define __ArtModule_h_INCLUDED__
+#ifndef __NatNetModule_h_INCLUDED__
+#define __NatNetModule_h_INCLUDED__
 
 #include <string>
 #include <cstdlib>
@@ -56,20 +56,20 @@ namespace Ubitrack { namespace Drivers {
 using namespace Dataflow;
 
 // forward declaration
-class ArtComponent;
+class NatNetComponent;
 
 /**
- * Module key for art.
+ * Module key for natnet.
  * Represents the port number on which to listen.
  */
-MAKE_NODEATTRIBUTEKEY_DEFAULT( ArtModuleKey, int, "Art", "artPort", 5000 );
+MAKE_NODEATTRIBUTEKEY_DEFAULT( NatNetModuleKey, int, "NatNet", "natnetPort", 5000 );
 
 
 /**
- * Component key for art.
+ * Component key for natnet.
  * Represents the body number
  */
-class ArtComponentKey
+class NatNetComponentKey
 {
 public:
     enum TargetType { target_6d, target_6d_flystick, target_6d_measurement_tool, target_6d_measurement_tool_reference, target_finger, target_3dcloud };
@@ -77,33 +77,33 @@ public:
 	enum FingerType { finger_hand, finger_thumb, finger_index, finger_middle };
 	enum FingerSide { side_left = 0, side_right = 1 };
 
-	// still ugly refactor art driver sometime..
+	// still ugly refactor natnet driver sometime..
 	// construct from configuration
-	ArtComponentKey( boost::shared_ptr< Graph::UTQLSubgraph > subgraph )
+	NatNetComponentKey( boost::shared_ptr< Graph::UTQLSubgraph > subgraph )
 	: m_body( 0 )
 	, m_targetType( target_6d )
 	, m_fingerSide ( side_left )
 	{
 		Graph::UTQLSubgraph::EdgePtr config;
 
-	  if ( subgraph->hasEdge( "ArtToTarget" ) )
-		  config = subgraph->getEdge( "ArtToTarget" );
+	  if ( subgraph->hasEdge( "NatNetToTarget" ) )
+		  config = subgraph->getEdge( "NatNetToTarget" );
 	  else if ( subgraph->hasEdge( "fingerHandOutput" ) )
 		  config = subgraph->getEdge( "fingerHandOutput" );
 
 	  if ( !config )
 	  {
-		  UBITRACK_THROW( "ArtTracker Pattern has neither \"ArtToTarget\" nor \"fingerHandOutput\" edge");
+		  UBITRACK_THROW( "NatNetTracker Pattern has neither \"NatNetToTarget\" nor \"fingerHandOutput\" edge");
 	  }
 
-	  config->getAttributeData( "artBodyId", m_body );
+	  config->getAttributeData( "natnetBodyId", m_body );
 	  if ( m_body <= 0 )
-            UBITRACK_THROW( "Missing or invalid \"artBodyId\" attribute on \"ArtToTarget\" resp. \"fingerHandOutput\" edge" );
+            UBITRACK_THROW( "Missing or invalid \"natnetBodyId\" attribute on \"NatNetToTarget\" resp. \"fingerHandOutput\" edge" );
 
-	  std::string typeString = config->getAttributeString( "artType" );
+	  std::string typeString = config->getAttributeString( "natnetType" );
 	  if ( typeString.empty() )
 	  {
-	      // no explicit art target type information. so we assume 6D
+	      // no explicit natnet target type information. so we assume 6D
 	      m_targetType = target_6d;
 	  }
 	  else
@@ -131,7 +131,7 @@ public:
 			  std::string fingerString = configNode->getAttributeString( "finger" );
 
 			  if (fingerString.length() == 0)
-				  UBITRACK_THROW( "Art finger target without finger id" );
+				  UBITRACK_THROW( "NatNet finger target without finger id" );
 
 			  if ( fingerString == "hand" )
 				  m_fingerType = finger_hand;
@@ -142,43 +142,43 @@ public:
 			  else if ( fingerString == "middle" )
 				  m_fingerType = finger_middle;
 			  else
-				  UBITRACK_THROW( "Art finger target with unknown finger type: " + fingerString );
+				  UBITRACK_THROW( "NatNet finger target with unknown finger type: " + fingerString );
 			  */
 
 			  std::string fingerSideString = config->getAttributeString( "fingerSide" );
 			  if (fingerSideString.length() == 0)
-				  UBITRACK_THROW( "Art finger target without finger side" );
+				  UBITRACK_THROW( "NatNet finger target without finger side" );
 
 			  if ( fingerSideString == "left" )
 				  m_fingerSide = side_left;
 			  else if ( fingerSideString == "right" )
 				  m_fingerSide = side_right;
 			  else
-				  UBITRACK_THROW( "Art finger target with unknown finger side: " + fingerSideString );
+				  UBITRACK_THROW( "NatNet finger target with unknown finger side: " + fingerSideString );
 
 		  }
 	      else
-			  UBITRACK_THROW( "Art target with unknown target type: " + typeString );
+			  UBITRACK_THROW( "NatNet target with unknown target type: " + typeString );
 	  }
 
 	}
 
 	// construct from body number
-	ArtComponentKey( int a )
+	NatNetComponentKey( int a )
 		: m_body( a )
         , m_targetType( target_6d )
 		, m_fingerSide ( side_left )
  	{}
 
     // construct from body number and target type
-    ArtComponentKey( int a, TargetType t )
+    NatNetComponentKey( int a, TargetType t )
         : m_body( a )
         , m_targetType( t )
 		, m_fingerSide( side_left )
     {}
 
 	// construct from body number and target type and finger type
-    ArtComponentKey( int a, TargetType t, FingerSide s )
+    NatNetComponentKey( int a, TargetType t, FingerSide s )
         : m_body( a )
         , m_targetType( t )
 		, m_fingerSide( s )
@@ -195,7 +195,7 @@ public:
     }
 
 	// less than operator for map
-	bool operator<( const ArtComponentKey& b ) const
+	bool operator<( const NatNetComponentKey& b ) const
     {
         if ( m_targetType == b.m_targetType )
 			if ( m_fingerSide == b.m_fingerSide )
@@ -214,18 +214,18 @@ protected:
 
 
 /**
- * Module for ART tracker.
+ * Module for NatNet tracker.
  * Does all the work
  */
-class ArtModule
-	: public Module< ArtModuleKey, ArtComponentKey, ArtModule, ArtComponent >
+class NatNetModule
+	: public Module< NatNetModuleKey, NatNetComponentKey, NatNetModule, NatNetComponent >
 {
 public:
 	/** UTQL constructor */
-	ArtModule( const ArtModuleKey& key, boost::shared_ptr< Graph::UTQLSubgraph >, FactoryHelper* pFactory );
+	NatNetModule( const NatNetModuleKey& key, boost::shared_ptr< Graph::UTQLSubgraph >, FactoryHelper* pFactory );
 
 	/** destructor */
-	~ArtModule();
+	~NatNetModule();
 
 	virtual void startModule();
 
@@ -245,35 +245,30 @@ protected:
 	Measurement::TimestampSync m_synchronizer;
 
 private:
-    void trySendPose( int id, ArtComponentKey::TargetType type, double qual, double* rot, double* mat, Ubitrack::Measurement::Timestamp ts );
-	void trySendPose( int id, ArtComponentKey::TargetType type, double qual, double* rot, double* mat, Ubitrack::Measurement::Timestamp ts, ArtComponentKey::FingerType f, ArtComponentKey::FingerSide s );
-	void trySendPose( boost::shared_pARTtr< std::vector< Ubitrack::Math::Vector < 3 > > > cloud, Ubitrack::Measurement::Timestamp ts );
+    void trySendPose( int id, NatNetComponentKey::TargetType type, double qual, double* rot, double* mat, Ubitrack::Measurement::Timestamp ts );
+	void trySendPose( boost::shared_ptr< std::vector< Ubitrack::Math::Vector < 3 > > > cloud, Ubitrack::Measurement::Timestamp ts );
 };
 
 
 /**
- * Component for ART tracker.
+ * Component for NatNet tracker.
  * Does nothing but provide a push port
 
  * @TODO: make this two separate components for 6d/3dlist
  */
-class ArtComponent
-	: public ArtModule::Component
+class NatNetComponent
+	: public NatNetModule::Component
 {
 public:
 	/** constructor */
-	ArtComponent( const std::string& name, boost::shared_ptr< Graph::UTQLSubgraph > subgraph, const ArtComponentKey& componentKey, ArtModule* pModule )
-		: ArtModule::Component( name, componentKey, pModule )
-		, m_port( "ArtToTarget", *this )
+	NatNetComponent( const std::string& name, boost::shared_ptr< Graph::UTQLSubgraph > subgraph, const NatNetComponentKey& componentKey, NatNetModule* pModule )
+		: NatNetModule::Component( name, componentKey, pModule )
+		, m_port( "NatNetToTarget", *this )
 		, m_cloudPort( "3DOutput", *this )
-		, m_fingerHandPort( "fingerHandOutput", *this )
-		, m_fingerThumbPort( "fingerThumbOutput", *this )
-		, m_fingerIndexPort( "fingerIndexOutput", *this )
-		, m_fingerMiddlePort( "fingerMiddleOutput", *this )
 	{}
 	
 	/** destructor */
-	~ArtComponent();
+	~NatNetComponent();
 
 	/** returns the port for usage by the module */
 	PushSupplier< Ubitrack::Measurement::Pose >& getPort()
@@ -283,38 +278,11 @@ public:
 	PushSupplier< Ubitrack::Measurement::PositionList >& getCloudPort()
 	{ return m_cloudPort; }
 
-	/** returns the port for usage bARTy the module */
-	PushSupplier< Ubitrack::Measurement::Pose >& getFingerPort( ArtComponentKey::FingerType t )
-	{
-		switch (t)
-		{
-		case ArtComponentKey::finger_hand:
-			return m_fingerHandPort;
-			break;
-		case ArtComponentKey::finger_thumb:
-			return m_fingerThumbPort;
-			break;
-		case ArtComponentKey::finger_index:
-			return m_fingerIndexPort;
-			break;
-		case ArtComponentKey::finger_middle:
-			return m_fingerMiddlePort;
-			break;
-		}
-
-		// return hand if nothing else matches..
-		return m_fingerHandPort;
-	}
-
 protected:
 	// the port is the only member
 	PushSupplier< Ubitrack::Measurement::Pose > m_port;
 	PushSupplier< Ubitrack::Measurement::PositionList > m_cloudPort;
 
-	PushSupplier< Ubitrack::Measurement::Pose > m_fingerHandPort;
-	PushSupplier< Ubitrack::Measurement::Pose > m_fingerThumbPort;
-	PushSupplier< Ubitrack::Measurement::Pose > m_fingerIndexPort;
-	PushSupplier< Ubitrack::Measurement::Pose > m_fingerMiddlePort;
 };
 
 } } // namespace Ubitrack::Drivers

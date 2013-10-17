@@ -22,7 +22,7 @@
  */
 
 
-#include "ArtModule.h"
+#include "NatNetModule.h"
 #include <iostream>
 #include <sstream>
 #include <algorithm>
@@ -38,48 +38,48 @@
 
 
 /* The pattern (allows "trackable" edges);
-<Pattern name="Art6D">
+<Pattern name="NatNet6D">
 	<Input>
-		<Node name="Art"/>
+		<Node name="NatNet"/>
 		<Node name="Body"/>
-		<Edge name="Config" source="Art" destination="Body">
-			<Predicate>trackable=="Art"</Predicate>
+		<Edge name="Config" source="NatNet" destination="Body">
+			<Predicate>trackable=="NatNet"</Predicate>
 		</Edge>
 	</Input>
 
 	<Output>
-		<Edge name="ArtToTarget" source="Art" destination="Body">
+		<Edge name="NatNetToTarget" source="NatNet" destination="Body">
 			<Attribute name="type" value="6D"/>
 			<Attribute name="mode" value="push"/>
-			<AttributeExpression name="artType">Config.artType</AttributeExpression>
-			<AttributeExpression name="artBodyId">Config.artBodyId</AttributeExpression>
+			<AttributeExpression name="natnetType">Config.natnetType</AttributeExpression>
+			<AttributeExpression name="natnetBodyId">Config.natnetBodyId</AttributeExpression>
 		</Edge>
 	</Output>
 
 	<DataflowConfiguration>
-		<UbitrackLib class="ArtTracker"/>
+		<UbitrackLib class="NatNetTracker"/>
 	</DataflowConfiguration>
 </Pattern>
 
 Without the pattern, a valid dataflow description or SRG definition is:
 
-<Pattern name="Art6D" id="ArtToBody1">
+<Pattern name="NatNet6D" id="NatNetToBody1">
 
 	<Output>
-		<Node name="Art" id="Art">
-			<Attribute name="artPort" value="5000"/>
+		<Node name="NatNet" id="NatNet">
+			<Attribute name="natnetPort" value="5000"/>
 		</Node>
 		<Node name="Body" id="Body1"/>
-		<Edge name="ArtToTarget" source="Art" destination="Body">
-			<Attribute name="artBodyId" value="3"/>
-			<Attribute name="artType" value="6d"/>
+		<Edge name="NatNetToTarget" source="NatNet" destination="Body">
+			<Attribute name="natnetBodyId" value="3"/>
+			<Attribute name="natnetType" value="6d"/>
 			<Attribute name="type" value="6D"/>
 			<Attribute name="mode" value="push"/>
 		</Edge>
 	</Output>
 
 	<DataflowConfiguration>
-		<UbitrackLib class="ArtTracker"/>
+		<UbitrackLib class="NatNetTracker"/>
 	</DataflowConfiguration>
 
 </Pattern>
@@ -87,29 +87,29 @@ Without the pattern, a valid dataflow description or SRG definition is:
 
 namespace Ubitrack { namespace Drivers {
 
-static log4cpp::Category& logger( log4cpp::Category::getInstance( "Drivers.Art" ) );
+static log4cpp::Category& logger( log4cpp::Category::getInstance( "Drivers.NatNet" ) );
 
 
-ArtModule::ArtModule( const ArtModuleKey& moduleKey, boost::shared_ptr< Graph::UTQLSubgraph >, FactoryHelper* pFactory )
-	: Module< ArtModuleKey, ArtComponentKey, ArtModule, ArtComponent >( moduleKey, pFactory )
+NatNetModule::NatNetModule( const NatNetModuleKey& moduleKey, boost::shared_ptr< Graph::UTQLSubgraph >, FactoryHelper* pFactory )
+	: Module< NatNetModuleKey, NatNetComponentKey, NatNetModule, NatNetComponent >( moduleKey, pFactory )
 	, m_synchronizer( 60 ) // assume 60 Hz for timestamp synchronization
 {}
 
 
-ArtComponent::~ArtComponent()
+NatNetComponent::~NatNetComponent()
 {
-	LOG4CPP_INFO( logger, "Destroying ART component" );
+	LOG4CPP_INFO( logger, "Destroying NatNet component" );
 }
 
 
 // Performs thread-safe initialization of networking... boost::asio is not thread-safe, at least not for sharing a single socket between threads,
 // see also http://www.boost.org/doc/libs/1_44_0/doc/html/boost_asio/overview/core/threads.html)
-void ArtModule::startModule()
+void NatNetModule::startModule()
 {
-	LOG4CPP_INFO( logger, "Creating ART network service on port " << m_moduleKey.get() );
+	LOG4CPP_INFO( logger, "Creating NatNet network service on port " << m_moduleKey.get() );
 
 	// Peter Keitler, 2010-12-14.
-	// Why do we need a Singleton here? There is exactly one UDP port per ART module (the module key of which is exactly the specified port)
+	// Why do we need a Singleton here? There is exactly one UDP port per NatNet module (the module key of which is exactly the specified port)
 	// Maybe, this should be refactured in the future!
 	
 	// Daniel Pustka, 2011-03-08
@@ -120,7 +120,7 @@ void ArtModule::startModule()
 	m_pSocket->async_receive_from(
 		boost::asio::buffer( receive_data, max_receive_length ),
 		sender_endpoint,
-		boost::bind( &ArtModule::HandleReceive, this, boost::asio::placeholders::error, boost::asio::placeholders::bytes_transferred ) );
+		boost::bind( &NatNetModule::HandleReceive, this, boost::asio::placeholders::error, boost::asio::placeholders::bytes_transferred ) );
 
 	m_pSocket->startNetwork();
 }
@@ -128,9 +128,9 @@ void ArtModule::startModule()
 
 // Performs thread-safe cleanup of networking... (boost::asio is not thread-safe, at least not for sharing a single socket between threads,
 // see also http://www.boost.org/doc/libs/1_44_0/doc/html/boost_asio/overview/core/threads.html)
-void ArtModule::stopModule()
+void NatNetModule::stopModule()
 {
-	LOG4CPP_INFO( logger, "Stopping ART network service on port " << m_moduleKey.get() );
+	LOG4CPP_INFO( logger, "Stopping NatNet network service on port " << m_moduleKey.get() );
 
 	m_pSocket->releaseSingleton();
 
@@ -140,24 +140,25 @@ void ArtModule::stopModule()
 	// Daniel Pustka, 2011-03-08: The purpose of the singleton is to not destroy the socket (see above)
 	m_pSocket.reset();
 
-	Module<ArtModuleKey, ArtComponentKey, ArtModule, ArtComponent>::stopModule();
+	Module<NatNetModuleKey, NatNetComponentKey, NatNetModule, NatNetComponent>::stopModule();
 }
 
 
-ArtModule::~ArtModule()
+NatNetModule::~NatNetModule()
 {}
 
 
-void ArtModule::HandleReceive (const boost::system::error_code err, size_t length)
+void NatNetModule::HandleReceive (const boost::system::error_code err, size_t length)
 {
 	// save the timestamp as soon as possible
 	Ubitrack::Measurement::Timestamp timestamp = Ubitrack::Measurement::now();
 
 	if ( m_running )
 	{
+		// XXX What's the default delay with NatNet .. needs to be measured..
 		// subtract the approximate processing time of the cameras and DTrack (19ms)
 		// (daniel) better synchronize the DTrack controller to a common NTP server and use "ts" fields directly.
-		//          This should work well at least with ARTtrack2/3 cameras (not necessarily ARTtrack/TP)
+		//          This should work well at least with NatNettrack2/3 cameras (not necessarily NatNettrack/TP)
 		timestamp -= 19000000;
 
 		// some error chekcing
@@ -287,7 +288,7 @@ void ArtModule::HandleReceive (const boost::system::error_code err, size_t lengt
 						break;
 					}
 					// try to send
-					trySendPose( id, ArtComponentKey::target_6d, qual, rot, mat, timestamp );
+					trySendPose( id, NatNetComponentKey::target_6d, qual, rot, mat, timestamp );
 					// update position for line search
 					lastpos = findpos + 2;
 				}				
@@ -346,7 +347,7 @@ void ArtModule::HandleReceive (const boost::system::error_code err, size_t lengt
 						break;
 					}
 					// try to send
-					trySendPose( id, ArtComponentKey::target_6d_flystick, qual, rot, mat, timestamp );
+					trySendPose( id, NatNetComponentKey::target_6d_flystick, qual, rot, mat, timestamp );
 					// update position for line search
 					lastpos = findpos + 2;
 				}				
@@ -404,7 +405,7 @@ void ArtModule::HandleReceive (const boost::system::error_code err, size_t lengt
 						break;
 					}
 					// try to send
-					trySendPose( id, ArtComponentKey::target_6d_measurement_tool, qual, rot, mat, timestamp );
+					trySendPose( id, NatNetComponentKey::target_6d_measurement_tool, qual, rot, mat, timestamp );
 					// update position for line search
 					lastpos = findpos + 2;
 				}				
@@ -464,7 +465,7 @@ void ArtModule::HandleReceive (const boost::system::error_code err, size_t lengt
 						break;
 					}
 					// try to send
-					trySendPose( id, ArtComponentKey::target_6d_measurement_tool_reference, qual, rot, mat, timestamp );
+					trySendPose( id, NatNetComponentKey::target_6d_measurement_tool_reference, qual, rot, mat, timestamp );
 					// update position for line search
 					lastpos = findpos + 2;
 				}				
@@ -508,18 +509,18 @@ void ArtModule::HandleReceive (const boost::system::error_code err, size_t lengt
 					lastpos += readChars;
 					recordC += readChars;
 
-					ArtComponentKey::FingerSide fingerSide = (side==0)?(ArtComponentKey::side_left):(ArtComponentKey::side_right);
+					NatNetComponentKey::FingerSide fingerSide = (side==0)?(NatNetComponentKey::side_left):(NatNetComponentKey::side_right);
 
 					// read and send hand pose
 					sscanf (recordC,
 							"[%lf %lf %lf][%lf %lf %lf %lf %lf %lf %lf %lf %lf]%n",
-							&rot[0], &rot[1], &rot[2],
+							&rot[0], &rot[1], &rot[2c],
 							&mat[0], &mat[3], &mat[6], &mat[1], &mat[4], &mat[7], &mat[2], &mat[5], &mat[8],
 							&readChars );
 					lastpos += readChars;
 					recordC += readChars;
 
-					trySendPose( id, ArtComponentKey::target_finger, qual, rot, mat, timestamp, ArtComponentKey::finger_hand, fingerSide );
+					trySendPose( id, NatNetComponentKey::target_finger, qual, rot, mat, timestamp, NatNetComponentKey::finger_hand, fingerSide );
 
 					// read and send thumb
 					sscanf (recordC,
@@ -531,7 +532,7 @@ void ArtModule::HandleReceive (const boost::system::error_code err, size_t lengt
 					lastpos += readChars;
 					recordC += readChars;
 
-					trySendPose( id, ArtComponentKey::target_finger, qual, rot, mat, timestamp, ArtComponentKey::finger_thumb, fingerSide );
+					trySendPose( id, NatNetComponentKey::target_finger, qual, rot, mat, timestamp, NatNetComponentKey::finger_thumb, fingerSide );
 
 					// read and send index
 					sscanf (recordC,
@@ -543,7 +544,7 @@ void ArtModule::HandleReceive (const boost::system::error_code err, size_t lengt
 					lastpos += readChars;
 					recordC += readChars;
 
-					trySendPose( id, ArtComponentKey::target_finger, qual, rot, mat, timestamp, ArtComponentKey::finger_index, fingerSide );
+					trySendPose( id, NatNetComponentKey::target_finger, qual, rot, mat, timestamp, NatNetComponentKey::finger_index, fingerSide );
 
 					// read and send middle
 					sscanf (recordC,
@@ -557,7 +558,7 @@ void ArtModule::HandleReceive (const boost::system::error_code err, size_t lengt
 
 					lastpos += 1;
 
-					trySendPose( id, ArtComponentKey::target_finger, qual, rot, mat, timestamp, ArtComponentKey::finger_middle, fingerSide );
+					trySendPose( id, NatNetComponentKey::target_finger, qual, rot, mat, timestamp, NatNetComponentKey::finger_middle, fingerSide );
 				}
 			}
 			else if (recordType == "3d")
@@ -624,15 +625,15 @@ void ArtModule::HandleReceive (const boost::system::error_code err, size_t lengt
 	m_pSocket->async_receive_from (
 		boost::asio::buffer ( receive_data, max_receive_length ),
 		sender_endpoint,
-		boost::bind (&ArtModule::HandleReceive, this, boost::asio::placeholders::error, boost::asio::placeholders::bytes_transferred));
+		boost::bind (&NatNetModule::HandleReceive, this, boost::asio::placeholders::error, boost::asio::placeholders::bytes_transferred));
 
 }
 
 
-void ArtModule::trySendPose( boost::shared_ptr< std::vector< Ubitrack::Math::Vector < 3 > > > cloud, Ubitrack::Measurement::Timestamp ts )
+void NatNetModule::trySendPose( boost::shared_ptr< std::vector< Ubitrack::Math::Vector < 3 > > > cloud, Ubitrack::Measurement::Timestamp ts )
 {
 	// 3D Cloud always has ID 1 for now..
-	ArtComponentKey key( 0, ArtComponentKey::target_3dcloud );
+	NatNetComponentKey key( 0, NatNetComponentKey::target_3dcloud );
 
 	if ( hasComponent( key ) )
 	{
@@ -646,8 +647,8 @@ void ArtModule::trySendPose( boost::shared_ptr< std::vector< Ubitrack::Math::Vec
 // 		for (ComponentMap::iterator it = m_componentMap.begin();
 // 			 it != m_componentMap.end(); ++it)
 // 		{
-// 			boost::shared_ptr< ArtComponent > cc(it->second);
-// 			ArtComponentKey keyc = cc->getKey();
+// 			boost::shared_ptr< NatNetComponent > cc(it->second);
+// 			NatNetComponentKey keyc = cc->getKey();
 // 			std::cout << "Comp: " << keyc.getBody() << " "
 // 					  << keyc.getTargetType() << " "
 // 					  << keyc.getFingerType() << " "
@@ -662,7 +663,7 @@ void ArtModule::trySendPose( boost::shared_ptr< std::vector< Ubitrack::Math::Vec
 
 }
 
-void ArtModule::trySendPose( int id, ArtComponentKey::TargetType type, double qual, double* rot, double* mat, Ubitrack::Measurement::Timestamp ts )
+void NatNetModule::trySendPose( int id, NatNetComponentKey::TargetType type, double qual, double* rot, double* mat, Ubitrack::Measurement::Timestamp ts )
 {
     // negative quality indicates that the body is not tracked at all
     if ( qual < 0.0 ) {
@@ -671,7 +672,7 @@ void ArtModule::trySendPose( int id, ArtComponentKey::TargetType type, double qu
 	}
 
     // on the network the IDs are 0 based, in the DTrack software they are 1 based..
-    ArtComponentKey key( id+1, type );
+    NatNetComponentKey key( id+1, type );
 
     // check for component
     if ( hasComponent( key ) )
@@ -692,33 +693,9 @@ void ArtModule::trySendPose( int id, ArtComponentKey::TargetType type, double qu
 }
 
 
-		/* send Finger Pose */
-void ArtModule::trySendPose( int id, ArtComponentKey::TargetType type, double qual, double* rot, double* mat, Ubitrack::Measurement::Timestamp ts, ArtComponentKey::FingerType f, ArtComponentKey::FingerSide s )
-{
-    // negative quality indicates that the body is not tracked at all
-    if ( qual < 0.0 )
-        return;
-
-    // on the network the IDs are 0 based, in the DTrack software they are 1 based..
-    ArtComponentKey key( id+1, type, s );
-
-    // check for component
-    if ( hasComponent( key ) )
-    {
-        // generate pose
-        Ubitrack::Math::Vector< 3 > position ( rot[0]/1000.0, rot[1]/1000.0, rot[2]/1000.0 );
-        Ubitrack::Math::Matrix< 3, 3 > rotMatrix ( mat );
-        Ubitrack::Math::Quaternion rotation ( rotMatrix );
-        Ubitrack::Measurement::Pose pose( ts, Ubitrack::Math::Pose( rotation, position ) );
-
-        //send it to the component
-        getComponent( key )->getFingerPort( f ).send( pose );
-    }
-}
-
 // register module at factory
 UBITRACK_REGISTER_COMPONENT( ComponentFactory* const cf ) {
-	cf->registerModule< ArtModule > ( "ArtTracker" );
+	cf->registerModule< NatNetModule > ( "NatNetTracker" );
 }
 
 } } // namespace Ubitrack::Drivers
