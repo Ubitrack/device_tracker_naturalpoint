@@ -256,7 +256,7 @@ void NatNetModule::startModule()
     else
         data_socket->set_option(boost::asio::ip::multicast::join_group(boost::asio::ip::address::from_string(MULTICAST_ADDRESS)));
 
-    LOG4CPP_DEBUG( logger, "Data socket ready" );
+    LOG4CPP_DEBUG( logger, "Data socket ready. PacketSize = " << sizeof(sPacket) );
     start_data_receive();
 
     LOG4CPP_DEBUG( logger, "Opening command socket" );
