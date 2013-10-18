@@ -6,105 +6,63 @@
                       xmlns:h="http://www.w3.org/1999/xhtml"
                       xsi:schemaLocation='http://ar.in.tum.de/ubitrack/utql ../../../schema/utql_templates.xsd'>
 
-    <Pattern name="ARTTracker" displayName="A.R.T. Tracker (Pose)">
-        <Description><p xmlns="http://www.w3.org/1999/xhtml">The A.R.T tracker pattern</p></Description>
+    <Pattern name="NatNetPoseTracker" displayName="OptiTrack Tracker (Pose)">
+        <Description><p xmlns="http://www.w3.org/1999/xhtml">The OptiTrack tracker pattern</p></Description>
         <Output>
-            <Node name="Art" displayName="A.R.T. Tracker">
-                <Description><p xmlns="http://www.w3.org/1999/xhtml">A.R.T. Tracker</p></Description>
+            <Node name="OptiTrack" displayName="OptiTrack Tracker">
+                <Description><p xmlns="http://www.w3.org/1999/xhtml">OptiTrack Tracker</p></Description>
                 <Attribute name="artPort" xsi:type="IntAttributeReferenceType"/>
             </Node>
-            <Node name="Body" displayName="A.R.T. Marker">
-                <Description><p xmlns="http://www.w3.org/1999/xhtml">A.R.T. Tracker</p></Description>
+            <Node name="Body" displayName="OptiTrack Marker">
+                <Description><p xmlns="http://www.w3.org/1999/xhtml">OptiTrack Tracker</p></Description>
             </Node>
-            <Edge name="ArtToTarget" displayName="Tracked Transformation" source="Art" destination="Body">
+            <Edge name="Output" displayName="Tracked Transformation" source="OptiTrack" destination="Body">
                 <Attribute name="type" value="6D" xsi:type="EnumAttributeReferenceType"/>
                 <Attribute name="mode" value="push" xsi:type="EnumAttributeReferenceType"/>
-                <Attribute name="artBodyId" displayName="A.R.T. body ID" min="1" max="20" default="1" xsi:type="IntAttributeDeclarationType">
-                    <Description><p xmlns="http://www.w3.org/1999/xhtml">Body ID used by A.R.T. (configured in DTrack software)</p></Description>
+                <Attribute name="natnetBodyName" displayName="OptiTrack body Name" default="Trackable1" xsi:type="StringAttributeDeclarationType">
+                    <Description><p xmlns="http://www.w3.org/1999/xhtml">Body Name used by OptiTrack (configured in TrackingTools software)</p></Description>
                 </Attribute>
-                <Attribute name="artType" displayName="A.R.T. marker type" default="6d" xsi:type="EnumAttributeDeclarationType">
-                    <EnumValue name="6d" displayName="6D body"/>
-                    <EnumValue name="6dmt" displayName="6D measurement tool"/>
+                <Attribute name="netnetBodyId" displayName="OptiTrack body ID" min="1" max="20" default="1" xsi:type="IntAttributeDeclarationType">
+                    <Description><p xmlns="http://www.w3.org/1999/xhtml">Body ID used by OptiTrack (configured in TrackingTools software)</p></Description>
                 </Attribute>
+
+                <Attribute name="natnetType" value="6d" xsi:type="EnumAttributeReferenceType"/>
             </Edge>
         </Output>
         <DataflowConfiguration>
-            <UbitrackLib class="ArtTracker"/>
+            <UbitrackLib class="NatNetTracker"/>
         </DataflowConfiguration>
     </Pattern>
 
-    <!-- This pattern is bullshit! Should be refactored in Ubitrack so that only the 3DOutput edge remains. At the moment
-    the ArtToTarget edge is needed only to set the artType attribute to the 3dcloud value.-->
-    <Pattern name="Art3D" displayName="A.R.T. Tracker (3D Position List)">
-        <Description><p xmlns="http://www.w3.org/1999/xhtml">Logs 3D positions of all marker balls detected by ART</p></Description>
+    <Pattern name="NatNetPointCloudTracker" displayName="OptiTrack Tracker (PointCloud)">
+        <Description><p xmlns="http://www.w3.org/1999/xhtml">The OptiTrack pointcloud pattern</p></Description>
         <Output>
-            <Node name="Art" displayName="A.R.T. Tracker">
-                <Description><p xmlns="http://www.w3.org/1999/xhtml">A.R.T. Tracker</p></Description>
-                <Attribute name="artPort" xsi:type="IntAttributeReferenceType"/>
+            <Node name="OptiTrack" displayName="OptiTrack Tracker">
+                <Description><p xmlns="http://www.w3.org/1999/xhtml">OptiTrack Tracker</p></Description>
+                <Attribute name="serverName" default="natnet.local" xsi:type="StringAttributeReferenceType"/>
+                <Attribute name="clientName" default="" xsi:type="StringAttributeReferenceType"/>
             </Node>
-            <Node name="Body" displayName="A.R.T. Marker">
-                <Description><p xmlns="http://www.w3.org/1999/xhtml">A.R.T. Tracker</p></Description>
+            <Node name="PointCloud" displayName="OptiTrack PointCloud">
+                <Description><p xmlns="http://www.w3.org/1999/xhtml">OptiTrack Tracker</p></Description>
             </Node>
-            <Edge name="ArtToTarget" displayName="Tracked Transformation" source="Art" destination="Body">
-                <Attribute name="type" value="6D" xsi:type="EnumAttributeReferenceType"/>
-                <Attribute name="mode" value="push" xsi:type="EnumAttributeReferenceType"/>
-                <Attribute name="artBodyId" displayName="A.R.T. body ID" min="1" max="20" default="1" xsi:type="IntAttributeDeclarationType">
-                    <Description><p xmlns="http://www.w3.org/1999/xhtml">Body ID used by A.R.T. (configured in DTrack software)</p></Description>
-                </Attribute>
-                <Attribute name="artType" displayName="A.R.T. marker type" default="3dcloud" xsi:type="EnumAttributeDeclarationType">
-                    <EnumValue name="3dcloud" displayName="3D point cloud"/>
-                </Attribute>
-            </Edge>
-            <Edge name="3DOutput" displayName="Position list" source="Art" destination="Body">
+            <Edge name="Output" displayName="Tracked Transformation" source="OptiTrack" destination="PointCloud">
                 <Attribute name="type" value="3DPositionList" xsi:type="EnumAttributeReferenceType"/>
                 <Attribute name="mode" value="push" xsi:type="EnumAttributeReferenceType"/>
+                <Attribute name="natnetBodyName" displayName="OptiTrack body Name" default="Trackable1" xsi:type="StringAttributeDeclarationType">
+                    <Description><p xmlns="http://www.w3.org/1999/xhtml">Body Name used by OptiTrack (configured in TrackingTools software)</p></Description>
+                </Attribute>
+                <Attribute name="netnetBodyId" displayName="OptiTrack body ID" min="1" max="20" default="1" xsi:type="IntAttributeDeclarationType">
+                    <Description><p xmlns="http://www.w3.org/1999/xhtml">Body ID used by OptiTrack (configured in TrackingTools software)</p></Description>
+                </Attribute>
+
+                <Attribute name="natnetType" value="6d" xsi:type="EnumAttributeReferenceType"/>
             </Edge>
         </Output>
         <DataflowConfiguration>
-            <UbitrackLib class="ArtTracker"/>
+            <UbitrackLib class="NatNetTracker"/>
         </DataflowConfiguration>
     </Pattern>
 
-    <Pattern name="ARTFingerTracker" displayName="A.R.T. finger tracker">
-        <Output>
-            <Node name="Art" displayName="A.R.T. Tracker">
-                <Attribute name="artPort" xsi:type="IntAttributeReferenceType"/>
-            </Node>
-            <Node name="Hand" displayName="Hand"/>
-            <Node name="Thumb" displayName="Thumb"/>
-            <Node name="Index" displayName="Index"/>
-            <Node name="Middle" displayName="Middle"/>
-            <Edge name="fingerHandOutput" displayName="fingerHandOutput" source="Art" destination="Hand">
-                <Attribute name="type" value="6D" xsi:type="EnumAttributeReferenceType"/>
-                <Attribute name="mode" value="push" xsi:type="EnumAttributeReferenceType"/>
-                <Attribute name="artBodyId" displayName="A.R.T. body ID" min="1" max="20" default="1" xsi:type="IntAttributeDeclarationType">
-                    <Description><p xmlns="http://www.w3.org/1999/xhtml">Body ID used by A.R.T. (configured in DTrack software)</p></Description>
-                </Attribute>
-                <Attribute name="artType" displayName="A.R.T. marker type" default="finger" xsi:type="EnumAttributeDeclarationType">
-                    <EnumValue name="finger" displayName="A.R.T. finger tracking"/>
-                </Attribute>
-				<Attribute name="fingerSide" default="left" displayName="A.R.T. finger tracking side" xsi:type="EnumAttributeDeclarationType">
-				  <EnumValue name="left" displayName="left Hand"/>
-				  <EnumValue name="right" displayName="right Hand"/>
-				</Attribute>
-            </Edge>
-            <Edge name="fingerThumbOutput" displayName="fingerThumbOutput" source="Hand" destination="Thumb">
-                <Attribute name="type" value="6D" xsi:type="EnumAttributeReferenceType"/>
-                <Attribute name="mode" value="push" xsi:type="EnumAttributeReferenceType"/>
-            </Edge>
-            <Edge name="fingerIndexOutput" displayName="fingerIndexOutput" source="Hand" destination="Index">
-                <Attribute name="type" value="6D" xsi:type="EnumAttributeReferenceType"/>
-                <Attribute name="mode" value="push" xsi:type="EnumAttributeReferenceType"/>
-            </Edge>
-            <Edge name="fingerMiddleOutput" displayName="fingerMiddleOutput" source="Hand" destination="Middle">
-                <Attribute name="type" value="6D" xsi:type="EnumAttributeReferenceType"/>
-                <Attribute name="mode" value="push" xsi:type="EnumAttributeReferenceType"/>
-            </Edge>
-        </Output>
-        <DataflowConfiguration>
-            <UbitrackLib class="ArtTracker"/>
-        </DataflowConfiguration>
-    </Pattern>
 
     <!-- Attribute declarations -->
 

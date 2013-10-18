@@ -81,12 +81,14 @@ using namespace Dataflow;
 
 // forward declaration
 class NatNetComponent;
+class NatNetRigidBodyReceiverComponent;
+class NatNetPointCloudReceiverComponent;
 
 /**
  * Module key for natnet.
  * Represents the port number on which to listen.
  */
-MAKE_NODEATTRIBUTEKEY_DEFAULT( NatNetModuleKey, std::string, "NatNet", "serverName", "natnet.local" );
+MAKE_NODEATTRIBUTEKEY_DEFAULT( NatNetModuleKey, std::string, "OptiTrack", "serverName", "natnet.local" );
 
 
 /**
@@ -102,21 +104,26 @@ public:
 	// construct from configuration
 	NatNetComponentKey( boost::shared_ptr< Graph::UTQLSubgraph > subgraph )
 	: m_body( 0 )
+    , m_name( "" )
 	, m_targetType( target_6d )
 	{
 		Graph::UTQLSubgraph::EdgePtr config;
 
-	  if ( subgraph->hasEdge( "NatNetToTarget" ) )
-		  config = subgraph->getEdge( "NatNetToTarget" );
+	  if ( subgraph->hasEdge( "Output" ) )
+		  config = subgraph->getEdge( "Output" );
 
 	  if ( !config )
 	  {
-		  UBITRACK_THROW( "NatNetTracker Pattern has neither \"NatNetToTarget\" nor \"fingerHandOutput\" edge");
+		  UBITRACK_THROW( "NatNetTracker Pattern has no \"Output\" edge");
 	  }
 
 	  config->getAttributeData( "natnetBodyId", m_body );
-	  if ( m_body <= 0 )
-            UBITRACK_THROW( "Missing or invalid \"natnetBodyId\" attribute on \"NatNetToTarget\" resp. \"fingerHandOutput\" edge" );
+	  config->getAttributeData( "natnetBodyName", m_name );
+
+	  if (( m_body <= 0 ))
+            UBITRACK_THROW( "Missing or invalid \"natnetBodyId\" or \"natnetBodyName\" attribute on \"Output\" edge" );
+
+
 
 	  std::string typeString = config->getAttributeString( "natnetType" );
 	  if ( typeString.empty() )
@@ -131,7 +138,8 @@ public:
 	      else if ( typeString == "3dcloud" )
 		  {
 			  m_targetType = target_3dcloud;
-			  m_body = 0;
+			  if ( m_name.empty() )
+		            UBITRACK_THROW( "Missing or invalid \"natnetBodyName\" attribute on \"Output\" for PointCloud target" );
 		  }
 	      else
 			  UBITRACK_THROW( "NatNet target with unknown target type: " + typeString );
@@ -142,18 +150,30 @@ public:
 	// construct from body number
 	NatNetComponentKey( int a )
 		: m_body( a )
+		, m_name( "" )
         , m_targetType( target_6d )
  	{}
 
     // construct from body number and target type
     NatNetComponentKey( int a, TargetType t )
         : m_body( a )
+		, m_name( "" )
         , m_targetType( t )
     {}
 
 	int getBody() const
 	{
 		return m_body;
+	}
+
+	std::string getName() const
+	{
+		return m_name;
+	}
+
+	void setName(std::string name)
+	{
+		m_name = name;
 	}
 
     TargetType getTargetType() const
@@ -172,6 +192,7 @@ public:
 
 protected:
 	int m_body;
+	std::string m_name;
 	TargetType m_targetType;
 };
 
@@ -207,11 +228,49 @@ protected:
 
 	Measurement::TimestampSync m_synchronizer;
 
-private:
-    void trySendPose( int id, NatNetComponentKey::TargetType type, RigidData& rdata, Ubitrack::Measurement::Timestamp ts );
-	void trySendPose( int id, NatNetComponentKey::TargetType type, PointCloudData& cdata, Ubitrack::Measurement::Timestamp ts );
+protected:
 
-    boost::asio::ip::udp::endpoint server_endpoint;
+	virtual boost::shared_ptr< ComponentClass > createComponent( const std::string&, const std::string& name, boost::shared_ptr< Graph::UTQLSubgraph> subgraph,
+		const ComponentKey& key, ModuleClass* pModule )
+	{
+		Graph::UTQLSubgraph::EdgePtr config;
+
+		if (subgraph->hasEdge("Output"))
+			config = subgraph->getEdge("Output");
+
+		if (!config) {
+			UBITRACK_THROW(
+					"NatNetTracker Pattern has no \"Output\" edge");
+		}
+
+		NatNetComponentKey::TargetType tt;
+		std::string typeString = config->getAttributeString("natnetType");
+		if (typeString.empty()) {
+			// no explicit natnet target type information. so we assume 6D
+			tt = NatNetComponentKey::target_6d;
+		} else {
+			if (typeString == "6d")
+				tt = NatNetComponentKey::target_6d;
+			else if (typeString == "3dcloud") {
+				tt = NatNetComponentKey::target_3dcloud;
+			} else
+				UBITRACK_THROW(
+						"NatNet target with unknown target type: "
+								+ typeString);
+		}
+		if ( tt == NatNetComponentKey::target_6d ) {
+			return boost::shared_ptr< ComponentClass >( new NatNetRigidBodyReceiverComponent( name, subgraph, key, pModule ) );
+		} else {
+			return boost::shared_ptr< ComponentClass >( new NatNetPointCloudReceiverComponent( name, subgraph, key, pModule ) );
+		}
+
+	}
+
+
+
+private:
+
+	boost::asio::ip::udp::endpoint server_endpoint;
     boost::asio::ip::udp::socket* command_socket;
     boost::asio::ip::udp::socket* data_socket;
 
@@ -242,7 +301,8 @@ private:
     unsigned char serverVersion[4]; // sending app's version [major.minor.build.revision]
     unsigned char natNetVersion[4]; // sending app's NatNet version [major.minor.build.revision]
 
-    std::map<int, std::string> idNameMap;
+    std::map<int, int> bodyIdMap;
+    std::map<std::string, int> pointcloudNameIdMap;
 
     bool serverInfoReceived;
     bool modelInfoReceived;
@@ -250,8 +310,8 @@ private:
     static boost::asio::io_service& get_io_service();
     static boost::asio::ip::udp::resolver& get_resolver();
 
-    std::string serverName;
-    std::string clientName;
+    std::string m_serverName;
+    std::string m_clientName;
 };
 
 
@@ -266,76 +326,51 @@ public:
 	/** constructor */
 	NatNetComponent( const std::string& name, boost::shared_ptr< Graph::UTQLSubgraph > subgraph, const NatNetComponentKey& componentKey, NatNetModule* pModule )
 		: NatNetModule::Component( name, componentKey, pModule )
-		, m_port( "Output", *this )
 	{}
+
+	template< class EventType >
+	void send( const EventType& rEvent );
+
 
 	/** destructor */
 	~NatNetComponent();
 
-protected:
-	// the port is the only member
-	int item_id;
-
-
 };
 
-template< class T >
-class NatNetReceiverComponent : public NatNetComponent {
+class NatNetRigidBodyReceiverComponent : public NatNetComponent {
 
-	/** returns the port for usage by the module */
-	PushSupplier< Ubitrack::Measurement::Pose >& getPort()
-	{ return m_port; }
-
-protected:
-	// the port is the only member
-	PushSupplier< Ubitrack::Measurement::Pose > m_port;
-
-
-};
-
-class NatNetPoseComponent
-	: public NatNetComponent
-{
-public:
 	/** constructor */
-	NatNetPoseComponent( const std::string& name, boost::shared_ptr< Graph::UTQLSubgraph > subgraph, const NatNetComponentKey& componentKey, NatNetModule* pModule )
-		: NatNetModule::Component( name, componentKey, pModule )
+	NatNetRigidBodyReceiverComponent( const std::string& name, boost::shared_ptr< Graph::UTQLSubgraph > subgraph, const NatNetComponentKey& componentKey, NatNetModule* pModule )
+		: NatNetComponent( name, subgraph, componentKey, pModule )
 		, m_port( "Output", *this )
 	{}
 	
-	/** destructor */
-	~NatNetPoseComponent();
-
-	/** returns the port for usage by the module */
-	PushSupplier< Ubitrack::Measurement::Pose >& getPort()
-	{ return m_port; }
+	template<>
+	inline void send( const Ubitrack::Measurement::Pose& rEvent ) {
+		m_port.send(rEvent);
+	}
 
 protected:
 	// the port is the only member
 	PushSupplier< Ubitrack::Measurement::Pose > m_port;
 };
 
-class NatNetPointcloudComponent
-	: public NatNetComponent
-{
-public:
+class NatNetPointCloudReceiverComponent : public NatNetComponent {
+
 	/** constructor */
-	NatNetPointcloudComponent( const std::string& name, boost::shared_ptr< Graph::UTQLSubgraph > subgraph, const NatNetComponentKey& componentKey, NatNetModule* pModule )
-		: NatNetModule::Component( name, componentKey, pModule )
+	NatNetPointCloudReceiverComponent( const std::string& name, boost::shared_ptr< Graph::UTQLSubgraph > subgraph, const NatNetComponentKey& componentKey, NatNetModule* pModule )
+		: NatNetComponent( name, subgraph, componentKey, pModule )
 		, m_port( "Output", *this )
 	{}
 
-	/** destructor */
-	~NatNetPointcloudComponent();
-
-	/** returns the port for usage by the module */
-	PushSupplier< Ubitrack::Measurement::Pose >& getPort()
-	{ return m_port; }
+	template<>
+	inline void send( const Ubitrack::Measurement::PositionList& rEvent ) {
+		m_port.send(rEvent);
+	}
 
 protected:
 	// the port is the only member
 	PushSupplier< Ubitrack::Measurement::PositionList > m_port;
-
 };
 
 

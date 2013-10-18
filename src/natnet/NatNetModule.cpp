@@ -72,6 +72,7 @@ Without the pattern, a valid dataflow description or SRG definition is:
 		<Node name="Body" id="Body1"/>
 		<Edge name="NatNetToTarget" source="NatNet" destination="Body">
 			<Attribute name="natnetBodyId" value="3"/>
+			<Attribute name="natnetBodyName" value="Trackable3"/>
 			<Attribute name="natnetType" value="6d"/>
 			<Attribute name="type" value="6D"/>
 			<Attribute name="mode" value="push"/>
@@ -162,7 +163,7 @@ boost::asio::ip::udp::resolver& NatNetModule::get_resolver()
 
 
 
-NatNetModule::NatNetModule( const NatNetModuleKey& moduleKey, boost::shared_ptr< Graph::UTQLSubgraph >, FactoryHelper* pFactory )
+NatNetModule::NatNetModule( const NatNetModuleKey& moduleKey, boost::shared_ptr< Graph::UTQLSubgraph > subgraph, FactoryHelper* pFactory )
 	: Module< NatNetModuleKey, NatNetComponentKey, NatNetModule, NatNetComponent >( moduleKey, pFactory )
 	, m_synchronizer( 100 ) // assume 100 Hz for timestamp synchronization
     , command_socket(NULL)
@@ -171,9 +172,23 @@ NatNetModule::NatNetModule( const NatNetModuleKey& moduleKey, boost::shared_ptr<
     , recv_data_packet(new sPacket)
     , serverInfoReceived(false)
     , modelInfoReceived(false)
-    , serverName(m_moduleKey.get())
-    , clientName("")
-{}
+    , m_serverName(m_moduleKey.get())
+    , m_clientName("")
+{
+
+	Graph::UTQLSubgraph::EdgePtr config;
+
+	if ( subgraph->hasEdge( "Output" ) )
+	  config = subgraph->getEdge( "Output" );
+
+	if ( !config )
+	{
+	  UBITRACK_THROW( "NatNetTracker Pattern has no \"Output\" edge");
+	}
+
+	m_clientName = config->getAttributeString( "clientName" );
+
+}
 
 
 NatNetComponent::~NatNetComponent()
@@ -197,36 +212,36 @@ void NatNetModule::startModule()
     boost::system::error_code ec;
 
     {
-    	LOG4CPP_DEBUG( logger, "Resolving " <<  serverName << std::endl);
+    	LOG4CPP_DEBUG( logger, "Resolving " <<  m_serverName << std::endl);
 
-        udp::resolver::query query(udp::v4(), serverName, "0");
+        udp::resolver::query query(udp::v4(), m_serverName, "0");
         udp::resolver::iterator result = get_resolver().resolve(query, ec);
         if (ec)
         {
-        	LOG4CPP_ERROR( logger, ec.category().name() << " ERROR while resolving " << serverName << " : " << ec.message() << std::endl);
+        	LOG4CPP_ERROR( logger, ec.category().name() << " ERROR while resolving " << m_serverName << " : " << ec.message() << std::endl);
             return;
         }
 
         server_endpoint = *result;
         server_endpoint.port(PORT_COMMAND);
-        LOG4CPP_DEBUG( logger, "Resolved " <<  serverName << " to " << server_endpoint << std::endl);
+        LOG4CPP_DEBUG( logger, "Resolved " <<  m_serverName << " to " << server_endpoint << std::endl);
     }
 
     udp::endpoint client_endpoint(udp::v4(), PORT_DATA);
-    if (!(clientName == ""))
+    if (!(m_clientName == ""))
     {
-    	LOG4CPP_DEBUG( logger, "Resolving " <<  clientName << std::endl);
-        udp::resolver::query query(udp::v4(), clientName, "0");
+    	LOG4CPP_DEBUG( logger, "Resolving " <<  m_clientName << std::endl);
+        udp::resolver::query query(udp::v4(), m_clientName, "0");
         udp::resolver::iterator result = get_resolver().resolve(query, ec);
         if (ec)
         {
-        	LOG4CPP_ERROR( logger, ec.category().name() << " ERROR while resolving " << clientName << " : " << ec.message() << std::endl);
+        	LOG4CPP_ERROR( logger, ec.category().name() << " ERROR while resolving " << m_clientName << " : " << ec.message() << std::endl);
             return;
         }
 
         client_endpoint = *result;
         client_endpoint.port(PORT_DATA);
-        LOG4CPP_DEBUG( logger, "Resolved " <<  clientName << " to " << client_endpoint << std::endl);
+        LOG4CPP_DEBUG( logger, "Resolved " <<  m_clientName << " to " << client_endpoint << std::endl);
     }
 
     LOG4CPP_DEBUG( logger, "Opening data socket on " <<  client_endpoint << std::endl);
@@ -245,7 +260,7 @@ void NatNetModule::startModule()
     }
 
     // Join the multicast group.
-    if (!(clientName == ""))
+    if (!(m_clientName == ""))
         data_socket->set_option(boost::asio::ip::multicast::join_group(boost::asio::ip::address::from_string(MULTICAST_ADDRESS).to_v4(), client_endpoint.address().to_v4()));
     else
         data_socket->set_option(boost::asio::ip::multicast::join_group(boost::asio::ip::address::from_string(MULTICAST_ADDRESS)));
@@ -262,7 +277,7 @@ void NatNetModule::startModule()
         return;
     }
 
-    if (!(clientName == ""))
+    if (!(m_clientName == ""))
     {
         client_endpoint.port(0);
         if (command_socket->bind(client_endpoint, ec))
@@ -867,8 +882,9 @@ void NatNetModule::decodeModelDef(const sPacket& data)
 
 void NatNetModule::processFrame(const FrameData* data)
 {
-	// save the timestamp as soon as possible - this could be done earlier, but would require passing the timestamp down
-	// would not matter too much if time-delay estimation is in place
+	// save the timestamp as soon as possible
+	// XXXthis could be done earlier, but would require passing the timestamp down
+	// .. but would not matter too much if time-delay estimation is in place
 	Ubitrack::Measurement::Timestamp timestamp = Ubitrack::Measurement::now();
 
 
@@ -878,19 +894,51 @@ void NatNetModule::processFrame(const FrameData* data)
 		// subtract the approximate processing time of the cameras and DTrack (19ms)
 		// (daniel) better synchronize the DTrack controller to a common NTP server and use "ts" fields directly.
 		//          This should work well at least with NatNettrack2/3 cameras (not necessarily NatNettrack/TP)
+
+		LOG4CPP_DEBUG( logger , "NatNet Latency: " << data->latency << std::endl);
+		// substract from timestamp .. instead of constant.
 		timestamp -= 19000000;
 
-
 		for (int i=0; i<data->nRigids; ++i) {
-			std::string name = idNameMap[data->rigids[i].ID];
 
-			// try to send
+			int id = bodyIdMap[data->rigids[i].ID];
+		    // on the network the IDs are 0 based, in the DTrack software they are 1 based..
+		    NatNetComponentKey key( id, NatNetComponentKey::target_6d );
 
-			// XXX STOPPED HERE ...
-			//trySendPose( data->rigids[i].ID, NatNetComponentKey::target_6d, (data->rigids[i]), timestamp );
+		    // check for component
+		    if ( hasComponent( key ) )
+		    {
+		        // generate pose
+		        Ubitrack::Measurement::Pose pose( timestamp, Ubitrack::Math::Pose( data->rigids[i].rot, data->rigids[i].pos ) );
 
+		        //send it to the component
+				LOG4CPP_TRACE( logger, "Sending pose for id " << id << " using " << getComponent( key )->getName() << ": " << pose );
+		        getComponent( key )->send( pose );
+		    }
+			else {
+				LOG4CPP_TRACE( logger, "No component for body id " << id );
+			}
+		}
 
-			//boost::shared_ptr< std::vector< Ubitrack::Math::Vector < 3 > > >
+		for (int i=0; i<data->nPointClouds; ++i) {
+
+			int id = pointcloudNameIdMap[data->pointClouds[i].name];
+		    NatNetComponentKey key( id, NatNetComponentKey::target_3dcloud );
+
+		    // check for component
+		    if ( hasComponent( key ) )
+		    {
+		    	boost::shared_ptr< std::vector< Ubitrack::Math::Vector < 3 > > > cloud(data->pointClouds[i].markersPos);
+
+				Ubitrack::Measurement::PositionList pc( timestamp, cloud );
+
+		        //send it to the component
+				LOG4CPP_TRACE( logger, "Sending pose for id " << id << " using " << getComponent( key )->getName() << ": " << cloud );
+		        getComponent( key )->send( cloud );
+		    }
+			else {
+				LOG4CPP_TRACE( logger, "No component for cloud name " << data->pointClouds[i].name );
+			}
 		}
 
 	}
@@ -899,28 +947,71 @@ void NatNetModule::processFrame(const FrameData* data)
 void NatNetModule::processModelDef(const ModelDef* data)
 {
 
-    for (int i=0; i<data->nRigids; ++i) {
-    	idNameMap[data->rigids[i].ID] = data->rigids[i].name;
-        if (data->rigids[i].name)
-        {
-        	NatNetComponentKey key( data->rigids[i].name, NatNetComponentKey::target_6d );
-        	if ( hasComponent( key ) ) {
+	// reset mappings
+	bodyIdMap.clear();
+	pointcloudNameIdMap.clear();
+
+    NatNetModule::ComponentList components = this->getAllComponents();
+    int index = 0;
+	ComponentList allComponents( getAllComponents() );
+	std::map<std::string, int> bodyNameIdMap;
+
+	for ( ComponentList::iterator it = allComponents.begin(); it != allComponents.end(); it++ ) {
+		if ( (*it)->getKey().m_targetType == NatNetComponentKey::target_3dcloud  ) {
+			// pointclouds require a name, enforced in configuration
+			pointcloudNameIdMap[(*it)->getKey().getName()] = (*it)->getKey().getBody();
+		} else {
+			if (!(*it)->getKey().getName().empty()) {
+				bodyNameIdMap[(*it)->getKey().getName()] = (*it)->getKey().getBody();
+			}
+		}
+	}
+
+
+	for (int i=0; i<data->nRigids; ++i) {
+
+    	NatNetComponentKey key( data->rigids[i].ID, NatNetComponentKey::target_6d );
+
+    	if ( hasComponent( key ) ) {
+
+    		bodyIdMap[data->rigids[i].ID] = getComponent( key )->getKey().getBody();
+
+    		if (getComponent( key )->getKey().getName() != data->rigids[i].name) {
+        		LOG4CPP_WARN( logger, "Received RigidBodyDef: " << data->rigids[i].name << " but configured name does not match: " << getComponent( key )->getKey().getName() << std::endl);
+    		} else {
         		LOG4CPP_INFO( logger, "Receiver connected for Rigid Body: " << data->rigids[i].name << std::endl);
-        	} else {
-        		LOG4CPP_WARN( logger, "Received ModelDef for " << data->rigids[i].name << " but receiver component was not found." << std::endl);
-        	}
-        }
+    		}
+    	} else {
+
+        	if (data->rigids[i].name)
+            {
+        		if (bodyNameIdMap.find(data->rigids[i].name) > 0) {
+        			bodyIdMap[data->rigids[i].ID] = bodyNameIdMap[data->rigids[i].name];
+            		LOG4CPP_INFO( logger, "Receiver connected for Rigid Body: " << data->rigids[i].name << std::endl);
+        		} else {
+            		LOG4CPP_WARN( logger, "Received RigidBodyDef: " << data->rigids[i].name << " but receiver component was not found." << std::endl);
+        		}
+
+            } else {
+            	LOG4CPP_WARN( logger, "Received RigidBodyDef without name and found no matching component for ID:" << data->rigids[i].ID << "." << std::endl);
+            }
+
+
+
+    	}
+
+
     }
+
 
 
     for (int i=0; i<data->nPointClouds; ++i) {
         if (data->pointClouds[i].name)
         {
-        	NatNetComponentKey key( data->rigids[i].name, NatNetComponentKey::target_3dcloud );
-        	if ( hasComponent( key ) ) {
+        	if (pointcloudNameIdMap.find(data->rigids[i].name) > 0) {
         		LOG4CPP_INFO( logger, "Receiver connected for Pointcloud: " << data->pointClouds[i].name << std::endl);
         	} else {
-        		LOG4CPP_WARN( logger, "Received ModelDef for " << data->pointClouds[i].name << " but receiver component was not found." << std::endl);
+        		LOG4CPP_WARN( logger, "Received PointCloudDef: " << data->pointClouds[i].name << " but receiver component was not found." << std::endl);
         	}
         }
     }
@@ -1075,13 +1166,13 @@ void NatNetModule::HandleReceive (const boost::system::error_code err, size_t le
 					if ( (lastpos = line.find ("[", lastpos)) == std::string::npos )
 					{
 						LOG4CPP_TRACE( logger, "illegal line, next body inaccessible" );
-						break;					
+						break;
 					}
 					// compute end pos by looking for the 3rd ']'
 					if ( (findpos = line.find ("] ", lastpos)) == std::string::npos )
 					{
 						LOG4CPP_TRACE( logger, "last body record" );
-					}					
+					}
 					// retrieve substring for body
 					std::string record = line.substr (lastpos, findpos - lastpos);
 					LOG4CPP_TRACE( logger, "record for body " << bodyIdx << " : " << record );
@@ -1089,11 +1180,11 @@ void NatNetModule::HandleReceive (const boost::system::error_code err, size_t le
 					int id;
 					double qual;
 					double rot[6];
-					double mat[9];			
+					double mat[9];
 					int tokenCount = sscanf (record.c_str(), "[%d %lf][%lf %lf %lf %lf %lf %lf][%lf %lf %lf %lf %lf %lf %lf %lf %lf]",
 							&id, &qual, &rot[0], &rot[1], &rot[2], &rot[3], &rot[4], &rot[5],
 							&mat[0], &mat[3], &mat[6], &mat[1], &mat[4], &mat[7], &mat[2], &mat[5], &mat[8]);
-					
+
 					if ( tokenCount != 17 ) {
 						LOG4CPP_TRACE( logger, "invalid record for body " << bodyIdx );
 						break;
@@ -1102,7 +1193,7 @@ void NatNetModule::HandleReceive (const boost::system::error_code err, size_t le
 					trySendPose( id, NatNetComponentKey::target_6d, qual, rot, mat, timestamp );
 					// update position for line search
 					lastpos = findpos + 2;
-				}				
+				}
 			}
 			else if (recordType == "6df")
 			{
@@ -1133,13 +1224,13 @@ void NatNetModule::HandleReceive (const boost::system::error_code err, size_t le
 					if ( (lastpos = line.find ("[", lastpos)) == std::string::npos )
 					{
 						LOG4CPP_TRACE( logger, "illegal line, next body inaccessible" );
-						break;					
+						break;
 					}
 					// compute end pos by looking for the 3rd ']'
 					if ( (findpos = line.find ("] ", lastpos)) == std::string::npos )
 					{
 						LOG4CPP_TRACE( logger, "last body record" );
-					}					
+					}
 					// retrieve substring for body
 					std::string record = line.substr (lastpos, findpos - lastpos);
 					LOG4CPP_TRACE( logger, "record for body " << bodyIdx << " : " << record );
@@ -1152,7 +1243,7 @@ void NatNetModule::HandleReceive (const boost::system::error_code err, size_t le
 					int tokenCount = sscanf (record.c_str(), "[%d %lf %d][%lf %lf %lf %lf %lf %lf][%lf %lf %lf %lf %lf %lf %lf %lf %lf]",
 							&id, &qual, &button, &rot[0], &rot[1], &rot[2], &rot[3], &rot[4], &rot[5],
 							&mat[0], &mat[3], &mat[6], &mat[1], &mat[4], &mat[7], &mat[2], &mat[5], &mat[8]);
-							
+
 					if ( tokenCount != 18 ) {
 						LOG4CPP_TRACE( logger, "invalid record for body " << bodyIdx );
 						break;
@@ -1161,7 +1252,7 @@ void NatNetModule::HandleReceive (const boost::system::error_code err, size_t le
 					trySendPose( id, NatNetComponentKey::target_6d_flystick, qual, rot, mat, timestamp );
 					// update position for line search
 					lastpos = findpos + 2;
-				}				
+				}
 			}
 			else if (recordType == "6dmt")
 			{
@@ -1191,13 +1282,13 @@ void NatNetModule::HandleReceive (const boost::system::error_code err, size_t le
 					if ( (lastpos = line.find ("[", lastpos)) == std::string::npos )
 					{
 						LOG4CPP_TRACE( logger, "illegal line, next body inaccessible" );
-						break;					
+						break;
 					}
 					// compute end pos by looking for the 3rd ']'
 					if ( (findpos = line.find ("] ", lastpos)) == std::string::npos )
 					{
 						LOG4CPP_TRACE( logger, "last body record" );
-					}					
+					}
 					// retrieve substring for body
 					std::string record = line.substr (lastpos, findpos - lastpos);
 					LOG4CPP_TRACE( logger, "record for body " << bodyIdx << " : " << record );
@@ -1206,11 +1297,11 @@ void NatNetModule::HandleReceive (const boost::system::error_code err, size_t le
 					double qual;
 					int button;
 					double rot[6];
-					double mat[9];			
+					double mat[9];
 					int tokenCount = sscanf (record.c_str(), "[%d %lf %d][%lf %lf %lf][%lf %lf %lf %lf %lf %lf %lf %lf %lf]",
 							&id, &qual, &button, &rot[0], &rot[1], &rot[2],
 							&mat[0], &mat[3], &mat[6], &mat[1], &mat[4], &mat[7], &mat[2], &mat[5], &mat[8]);
-					
+
 					if ( tokenCount != 15 ) {
 						LOG4CPP_TRACE( logger, "invalid record for body " << bodyIdx );
 						break;
@@ -1219,7 +1310,7 @@ void NatNetModule::HandleReceive (const boost::system::error_code err, size_t le
 					trySendPose( id, NatNetComponentKey::target_6d_measurement_tool, qual, rot, mat, timestamp );
 					// update position for line search
 					lastpos = findpos + 2;
-				}				
+				}
 			}
 			else if (recordType == "6dmtr")
 			{
@@ -1252,13 +1343,13 @@ void NatNetModule::HandleReceive (const boost::system::error_code err, size_t le
 					if ( (lastpos = line.find ("[", lastpos)) == std::string::npos )
 					{
 						LOG4CPP_TRACE( logger, "illegal line, next body inaccessible" );
-						break;					
+						break;
 					}
 					// compute end pos by looking for the 3rd ']'
 					if ( (findpos = line.find ("] ", lastpos)) == std::string::npos )
 					{
 						LOG4CPP_TRACE( logger, "last body record" );
-					}					
+					}
 					// retrieve substring for body
 					std::string record = line.substr (lastpos, findpos - lastpos);
 					LOG4CPP_TRACE( logger, "record for body " << bodyIdx << " : " << record );
@@ -1266,11 +1357,11 @@ void NatNetModule::HandleReceive (const boost::system::error_code err, size_t le
 					int id;
 					double qual;
 					double rot[6];
-					double mat[9];			
+					double mat[9];
 					int tokenCount = sscanf (record.c_str(), "[%d %lf][%lf %lf %lf][%lf %lf %lf %lf %lf %lf %lf %lf %lf]",
 							&id, &qual, &rot[0], &rot[1], &rot[2],
 							&mat[0], &mat[3], &mat[6], &mat[1], &mat[4], &mat[7], &mat[2], &mat[5], &mat[8]);
-					
+
 					if ( tokenCount != 14 ) {
 						LOG4CPP_TRACE( logger, "invalid record for body " << bodyIdx );
 						break;
@@ -1279,7 +1370,7 @@ void NatNetModule::HandleReceive (const boost::system::error_code err, size_t le
 					trySendPose( id, NatNetComponentKey::target_6d_measurement_tool_reference, qual, rot, mat, timestamp );
 					// update position for line search
 					lastpos = findpos + 2;
-				}				
+				}
 			}
 			else if (recordType == "gl")
 			{
