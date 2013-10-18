@@ -230,42 +230,8 @@ protected:
 
 protected:
 
-	virtual boost::shared_ptr< ComponentClass > createComponent( const std::string&, const std::string& name, boost::shared_ptr< Graph::UTQLSubgraph> subgraph,
-		const ComponentKey& key, ModuleClass* pModule )
-	{
-		Graph::UTQLSubgraph::EdgePtr config;
-
-		if (subgraph->hasEdge("Output"))
-			config = subgraph->getEdge("Output");
-
-		if (!config) {
-			UBITRACK_THROW(
-					"NatNetTracker Pattern has no \"Output\" edge");
-		}
-
-		NatNetComponentKey::TargetType tt;
-		std::string typeString = config->getAttributeString("natnetType");
-		if (typeString.empty()) {
-			// no explicit natnet target type information. so we assume 6D
-			tt = NatNetComponentKey::target_6d;
-		} else {
-			if (typeString == "6d")
-				tt = NatNetComponentKey::target_6d;
-			else if (typeString == "3dcloud") {
-				tt = NatNetComponentKey::target_3dcloud;
-			} else
-				UBITRACK_THROW(
-						"NatNet target with unknown target type: "
-								+ typeString);
-		}
-		if ( tt == NatNetComponentKey::target_6d ) {
-			return boost::shared_ptr< ComponentClass >( new NatNetRigidBodyReceiverComponent( name, subgraph, key, pModule ) );
-		} else {
-			return boost::shared_ptr< ComponentClass >( new NatNetPointCloudReceiverComponent( name, subgraph, key, pModule ) );
-		}
-
-	}
-
+	boost::shared_ptr< ComponentClass > createComponent( const std::string&, const std::string& name, boost::shared_ptr< Graph::UTQLSubgraph> subgraph,
+				const ComponentKey& key, ModuleClass* pModule );
 
 
 private:
@@ -329,7 +295,9 @@ public:
 	{}
 
 	template< class EventType >
-	void send( const EventType& rEvent );
+	void send( const EventType& rEvent ) {
+
+	};
 
 
 	/** destructor */
@@ -338,14 +306,13 @@ public:
 };
 
 class NatNetRigidBodyReceiverComponent : public NatNetComponent {
-
+public:
 	/** constructor */
 	NatNetRigidBodyReceiverComponent( const std::string& name, boost::shared_ptr< Graph::UTQLSubgraph > subgraph, const NatNetComponentKey& componentKey, NatNetModule* pModule )
 		: NatNetComponent( name, subgraph, componentKey, pModule )
 		, m_port( "Output", *this )
 	{}
 	
-	template<>
 	inline void send( const Ubitrack::Measurement::Pose& rEvent ) {
 		m_port.send(rEvent);
 	}
@@ -356,14 +323,13 @@ protected:
 };
 
 class NatNetPointCloudReceiverComponent : public NatNetComponent {
-
+public:
 	/** constructor */
 	NatNetPointCloudReceiverComponent( const std::string& name, boost::shared_ptr< Graph::UTQLSubgraph > subgraph, const NatNetComponentKey& componentKey, NatNetModule* pModule )
 		: NatNetComponent( name, subgraph, componentKey, pModule )
 		, m_port( "Output", *this )
 	{}
 
-	template<>
 	inline void send( const Ubitrack::Measurement::PositionList& rEvent ) {
 		m_port.send(rEvent);
 	}
@@ -391,7 +357,7 @@ struct RigidDef
     const char* name;
     int ID;
     int parentID;
-    Ubitrack::Math::Vector < 3 > offset;
+    Ubitrack::Math::Vector < 3, float > offset;
 };
 
 struct SkeletonDef
@@ -416,16 +382,16 @@ struct PointCloudData
 {
     const char* name;
     int nMarkers;
-    const Ubitrack::Math::Vector < 3 >* markersPos;
+    const Ubitrack::Math::Vector < 3, float >* markersPos;
 };
 
 struct RigidData
 {
     int ID;
-    Ubitrack::Math::Vector < 3 > pos;
-    Ubitrack::Math::Quaternion rot;
+    Ubitrack::Math::Vector < 3, float > pos;
+    Ubitrack::Math::Vector< 4, float> rot;
     int nMarkers;
-    const Ubitrack::Math::Vector < 3 >* markersPos;
+    const Ubitrack::Math::Vector < 3, float >* markersPos;
     const int* markersID; // optional (2.0+)
     const float* markersSize; // optional (2.0+)
     float meanError; // optional (2.0+)
@@ -451,7 +417,7 @@ struct FrameData
     float latency;
     // unidentified markers
     int nOtherMarkers;
-    const Ubitrack::Math::Vector < 3 >* otherMarkersPos;
+    const Ubitrack::Math::Vector < 3, float >* otherMarkersPos;
 };
 
 

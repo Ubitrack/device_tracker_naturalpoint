@@ -204,7 +204,7 @@ void NatNetModule::startModule()
 	LOG4CPP_INFO( logger, "Creating NatNet network service on port " << m_moduleKey.get() );
 
 	LOG4CPP_DEBUG( logger, "Starting network receiver thread" );
-	m_pNetworkThread = boost::shared_ptr< boost::thread >( new boost::thread( boost::bind( &boost::asio::io_service::run, get_io_service() ) ) );
+	m_pNetworkThread = boost::shared_ptr< boost::thread >( new boost::thread( boost::bind( static_cast<size_t (boost::asio::io_service::*)()>(&boost::asio::io_service::run), get_io_service() ) ) );
 
     if (command_socket) delete command_socket; command_socket = NULL;
     if (data_socket) delete data_socket; data_socket = NULL;
@@ -587,16 +587,13 @@ static void memread(const T*& dest, int n, const unsigned char*& ptr, const unsi
         }
     }
 }
-
-template<>
+/*
 static void memread(Ubitrack::Math::Vector3& dest, const unsigned char*& ptr, const unsigned char*& end, const char* fieldName=NULL)
 {
-	float dest_tmp[3];
     if (ptr + sizeof(float[3]) <= end)
     {
-        dest_tmp = *(const float*)ptr;
         ptr += sizeof(float[3]);
-        dest = Ubitrack::Math::Vector3(dest_tmp[0], dest_tmp[1], dest_tmp[2]);
+        dest = Ubitrack::Math::Vector3(((const float*)ptr)[0], ((const float*)ptr)[1], ((const float*)ptr)[2]);
     }
     else
     {
@@ -612,15 +609,12 @@ static void memread(Ubitrack::Math::Vector3& dest, const unsigned char*& ptr, co
     }
 }
 
-template<>
 static void memread(Ubitrack::Math::Quaternion& dest, const unsigned char*& ptr, const unsigned char*& end, const char* fieldName=NULL)
 {
-	float dest_tmp[4];
     if (ptr + sizeof(float[4]) <= end)
     {
-        dest_tmp = *(const float*)ptr;
         ptr += sizeof(float[4]);
-        dest = Ubitrack::Math::Quaternion(dest_tmp[0], dest_tmp[1], dest_tmp[2], dest_tmp[3]);
+        dest = Ubitrack::Math::Quaternion(((const float*)ptr)[0], ((const float*)ptr)[1], ((const float*)ptr)[2], ((const float*)ptr)[3]);
     }
     else
     {
@@ -636,7 +630,7 @@ static void memread(Ubitrack::Math::Quaternion& dest, const unsigned char*& ptr,
     }
 }
 
-
+*/
 
 void NatNetModule::decodeFrame(const sPacket& data)
 {
@@ -887,6 +881,9 @@ void NatNetModule::processFrame(const FrameData* data)
 	// .. but would not matter too much if time-delay estimation is in place
 	Ubitrack::Measurement::Timestamp timestamp = Ubitrack::Measurement::now();
 
+	// use synchronizer to correct timestamps
+	// XXX is this correct ??
+	timestamp = m_synchronizer.convertNativeToLocal( data->frameNumber, timestamp );
 
 	if ( m_running )
 	{
@@ -909,7 +906,12 @@ void NatNetModule::processFrame(const FrameData* data)
 		    if ( hasComponent( key ) )
 		    {
 		        // generate pose
-		        Ubitrack::Measurement::Pose pose( timestamp, Ubitrack::Math::Pose( data->rigids[i].rot, data->rigids[i].pos ) );
+		        Ubitrack::Measurement::Pose pose( timestamp,
+		        	Ubitrack::Math::Pose(
+		        		Ubitrack::Math::Quaternion(data->rigids[i].rot(0), data->rigids[i].rot(1), data->rigids[i].rot(2), data->rigids[i].rot(3)),
+		        		Ubitrack::Math::Vector < 3 >(data->rigids[i].pos(0), data->rigids[i].pos(1), data->rigids[i].pos(2))
+	        		)
+		        );
 
 		        //send it to the component
 				LOG4CPP_TRACE( logger, "Sending pose for id " << id << " using " << getComponent( key )->getName() << ": " << pose );
@@ -928,7 +930,12 @@ void NatNetModule::processFrame(const FrameData* data)
 		    // check for component
 		    if ( hasComponent( key ) )
 		    {
-		    	boost::shared_ptr< std::vector< Ubitrack::Math::Vector < 3 > > > cloud(data->pointClouds[i].markersPos);
+
+		    	// possible without copying ??
+		    	boost::shared_ptr< std::vector< Ubitrack::Math::Vector < 3 > > > cloud(new std::vector< Ubitrack::Math::Vector < 3 > >(data->pointClouds[i].nMarkers));
+		    	for (int i=0; i < data->pointClouds[i].nMarkers; i++) {
+		    		cloud->at(i) = Ubitrack::Math::Vector < 3 >(data->pointClouds[i].markersPos[i](0), data->pointClouds[i].markersPos[i](1), data->pointClouds[i].markersPos[i](2));
+		    	}
 
 				Ubitrack::Measurement::PositionList pc( timestamp, cloud );
 
@@ -944,6 +951,8 @@ void NatNetModule::processFrame(const FrameData* data)
 	}
 }
 
+
+
 void NatNetModule::processModelDef(const ModelDef* data)
 {
 
@@ -957,7 +966,7 @@ void NatNetModule::processModelDef(const ModelDef* data)
 	std::map<std::string, int> bodyNameIdMap;
 
 	for ( ComponentList::iterator it = allComponents.begin(); it != allComponents.end(); it++ ) {
-		if ( (*it)->getKey().m_targetType == NatNetComponentKey::target_3dcloud  ) {
+		if ( (*it)->getKey().getTargetType() == NatNetComponentKey::target_3dcloud  ) {
 			// pointclouds require a name, enforced in configuration
 			pointcloudNameIdMap[(*it)->getKey().getName()] = (*it)->getKey().getBody();
 		} else {
@@ -985,7 +994,7 @@ void NatNetModule::processModelDef(const ModelDef* data)
 
         	if (data->rigids[i].name)
             {
-        		if (bodyNameIdMap.find(data->rigids[i].name) > 0) {
+        		if (bodyNameIdMap.count(data->rigids[i].name) > 0) {
         			bodyIdMap[data->rigids[i].ID] = bodyNameIdMap[data->rigids[i].name];
             		LOG4CPP_INFO( logger, "Receiver connected for Rigid Body: " << data->rigids[i].name << std::endl);
         		} else {
@@ -1008,7 +1017,7 @@ void NatNetModule::processModelDef(const ModelDef* data)
     for (int i=0; i<data->nPointClouds; ++i) {
         if (data->pointClouds[i].name)
         {
-        	if (pointcloudNameIdMap.find(data->rigids[i].name) > 0) {
+        	if (pointcloudNameIdMap.count(data->rigids[i].name) > 0) {
         		LOG4CPP_INFO( logger, "Receiver connected for Pointcloud: " << data->pointClouds[i].name << std::endl);
         	} else {
         		LOG4CPP_WARN( logger, "Received PointCloudDef: " << data->pointClouds[i].name << " but receiver component was not found." << std::endl);
@@ -1020,574 +1029,42 @@ void NatNetModule::processModelDef(const ModelDef* data)
 
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-void NatNetModule::HandleReceive (const boost::system::error_code err, size_t length)
+boost::shared_ptr< NatNetModule::ComponentClass > NatNetModule::createComponent( const std::string&, const std::string& name, boost::shared_ptr< Graph::UTQLSubgraph> subgraph,
+	const ComponentKey& key, ModuleClass* pModule )
 {
-	// save the timestamp as soon as possible
-	Ubitrack::Measurement::Timestamp timestamp = Ubitrack::Measurement::now();
+	Graph::UTQLSubgraph::EdgePtr config;
 
-	if ( m_running )
-	{
-		// XXX What's the default delay with NatNet .. needs to be measured..
-		// subtract the approximate processing time of the cameras and DTrack (19ms)
-		// (daniel) better synchronize the DTrack controller to a common NTP server and use "ts" fields directly.
-		//          This should work well at least with NatNettrack2/3 cameras (not necessarily NatNettrack/TP)
-		timestamp -= 19000000;
+	if (subgraph->hasEdge("Output"))
+		config = subgraph->getEdge("Output");
 
-		// some error chekcing
-		if ( err && err != boost::asio::error::message_size )
-		{
-			LOG4CPP_CRIT( logger,"Error receiving from socket: \"" << err << "\"" );
-			return;
-		}
-
-		if (length >= max_receive_length)
-		{
-			LOG4CPP_CRIT( logger, "FIXME: received more than max_receive_length bytes." );
-			return;
-		}
-
-		// make receive data null terminated
-		receive_data[length] = 0;
-
-		// split the received data into lines
-		std::string data (receive_data);
-		std::vector<std::string> lines;
-		{
-			std::size_t lastpos = 0;
-			std::size_t findpos = 0;
-			while ( ( findpos = data.find ( "\r\n", lastpos ) ) != std::string::npos )
-			{
-			  std::string s = data.substr ( lastpos, ( findpos-lastpos ) );
-			  lines.push_back ( s );
-			  lastpos = findpos+2;
-			}
-		}
-
-		// look at every line
-		for (std::vector<std::string>::iterator it = lines.begin(); it != lines.end();
-		   it++)
-		{
-			std::string line (*it);
-			LOG4CPP_DEBUG( logger, "Parsing line: " << line );
-
-			// find the first space to determine the recordtype
-			std::size_t lastpos = 0;
-
-			std::size_t findpos = line.find (" ");
-			// invalid record
-			if (findpos == std::string::npos)
-				break;
-
-			std::string recordType = line.substr (lastpos, findpos-lastpos);
-
-
-			if (recordType == "fr")
-			{
-				LOG4CPP_TRACE( logger, "record type: fr" );
-
-				// frame start
-				// we found a new frame
-				// eg: "fr 12345"
-				lastpos = findpos+1;
-				findpos = line.find (" ", lastpos);
-				std::string frString = line.substr (lastpos, findpos-lastpos);
-				int fr = atol ( frString.c_str() );
-
-				timestamp = m_synchronizer.convertNativeToLocal( fr, timestamp );
-
-			}
-			else if (recordType == "ts")
-			{
-				LOG4CPP_TRACE( logger, "record type: ts" );
-
-				// timestamp
-				// timestamp
-				// eg: "ts 37949.735000"
-
-			}
-			else if (recordType == "6d")
-			{
-				LOG4CPP_TRACE( logger, "record type: 6d" );
-
-				// 6d standard bodies
-				// eg: "6d 2 [0 1.000][1092.858 -662.008 -189.740 -177.4073 27.3061 -18.7763][0.841281 0.301898 0.448447 0.286007 -0.952493 0.104679 0.458744 0.040194 -0.887659] [3 1.000][242.154 -674.257 -223.429 -105.4729 16.5325 3.4309][0.956940 -0.289719 0.018103 -0.057371 -0.249893 -0.966572 0.284559 0.923914 -0.255754] "
-				// or for DTrack2, note the subtle difference in the end!
-				// eg: "6d 2 [0 1.000][1092.858 -662.008 -189.740 -177.4073 27.3061 -18.7763][0.841281 0.301898 0.448447 0.286007 -0.952493 0.104679 0.458744 0.040194 -0.887659] [3 1.000][242.154 -674.257 -223.429 -105.4729 16.5325 3.4309][0.956940 -0.289719 0.018103 -0.057371 -0.249893 -0.966572 0.284559 0.923914 -0.255754]"
-
-				// retrieve amount of bodies
-				lastpos = findpos + 1;
-				findpos = line.find (" ", lastpos);
-				int bodyCount;
-				std::string count = line.substr(lastpos, findpos - lastpos);
-				if ( sscanf( count.c_str(), "%d", &bodyCount ) != 1 )
-				{
-					LOG4CPP_TRACE( logger, "illegal line, amount of bodies inaccessible, token: " << count );
-					continue;
-				}
-				LOG4CPP_TRACE( logger, "amount of bodies: " << bodyCount );
-				for ( int bodyIdx = 0; bodyIdx < bodyCount; bodyIdx ++ )
-				{
-					if ( lastpos > line.length() )
-					{
-						LOG4CPP_TRACE( logger, "illegal line, unexpected end of line" );
-						break;
-					}
-					// compute start pos by looking for the first '['
-					if ( (lastpos = line.find ("[", lastpos)) == std::string::npos )
-					{
-						LOG4CPP_TRACE( logger, "illegal line, next body inaccessible" );
-						break;
-					}
-					// compute end pos by looking for the 3rd ']'
-					if ( (findpos = line.find ("] ", lastpos)) == std::string::npos )
-					{
-						LOG4CPP_TRACE( logger, "last body record" );
-					}
-					// retrieve substring for body
-					std::string record = line.substr (lastpos, findpos - lastpos);
-					LOG4CPP_TRACE( logger, "record for body " << bodyIdx << " : " << record );
-					// parse substring
-					int id;
-					double qual;
-					double rot[6];
-					double mat[9];
-					int tokenCount = sscanf (record.c_str(), "[%d %lf][%lf %lf %lf %lf %lf %lf][%lf %lf %lf %lf %lf %lf %lf %lf %lf]",
-							&id, &qual, &rot[0], &rot[1], &rot[2], &rot[3], &rot[4], &rot[5],
-							&mat[0], &mat[3], &mat[6], &mat[1], &mat[4], &mat[7], &mat[2], &mat[5], &mat[8]);
-
-					if ( tokenCount != 17 ) {
-						LOG4CPP_TRACE( logger, "invalid record for body " << bodyIdx );
-						break;
-					}
-					// try to send
-					trySendPose( id, NatNetComponentKey::target_6d, qual, rot, mat, timestamp );
-					// update position for line search
-					lastpos = findpos + 2;
-				}
-			}
-			else if (recordType == "6df")
-			{
-				LOG4CPP_TRACE( logger, "record type: 6df" );
-
-				// 6d flightsticks
-				// never seen one so far
-
-				// retrieve amount of bodies
-				lastpos = findpos + 1;
-				findpos = line.find (" ", lastpos);
-				int bodyCount;
-				std::string count = line.substr(lastpos, findpos - lastpos);
-				if ( sscanf( count.c_str(), "%d", &bodyCount ) != 1 )
-				{
-					LOG4CPP_TRACE( logger, "illegal line, amount of bodies inaccessible, token: " << count );
-					continue;
-				}
-				LOG4CPP_TRACE( logger, "amount of bodies: " << bodyCount );
-				for ( int bodyIdx = 0; bodyIdx < bodyCount; bodyIdx ++ )
-				{
-					if ( lastpos > line.length() )
-					{
-						LOG4CPP_TRACE( logger, "illegal line, unexpected end of line" );
-						break;
-					}
-					// compute start pos by looking for the first '['
-					if ( (lastpos = line.find ("[", lastpos)) == std::string::npos )
-					{
-						LOG4CPP_TRACE( logger, "illegal line, next body inaccessible" );
-						break;
-					}
-					// compute end pos by looking for the 3rd ']'
-					if ( (findpos = line.find ("] ", lastpos)) == std::string::npos )
-					{
-						LOG4CPP_TRACE( logger, "last body record" );
-					}
-					// retrieve substring for body
-					std::string record = line.substr (lastpos, findpos - lastpos);
-					LOG4CPP_TRACE( logger, "record for body " << bodyIdx << " : " << record );
-					// parse substring
-					int id;
-					double qual;
-					int button;
-					double rot[6];
-					double mat[9];
-					int tokenCount = sscanf (record.c_str(), "[%d %lf %d][%lf %lf %lf %lf %lf %lf][%lf %lf %lf %lf %lf %lf %lf %lf %lf]",
-							&id, &qual, &button, &rot[0], &rot[1], &rot[2], &rot[3], &rot[4], &rot[5],
-							&mat[0], &mat[3], &mat[6], &mat[1], &mat[4], &mat[7], &mat[2], &mat[5], &mat[8]);
-
-					if ( tokenCount != 18 ) {
-						LOG4CPP_TRACE( logger, "invalid record for body " << bodyIdx );
-						break;
-					}
-					// try to send
-					trySendPose( id, NatNetComponentKey::target_6d_flystick, qual, rot, mat, timestamp );
-					// update position for line search
-					lastpos = findpos + 2;
-				}
-			}
-			else if (recordType == "6dmt")
-			{
-				LOG4CPP_TRACE( logger, "record type: 6dmt" );
-
-				// 6d measurement tool
-
-				// retrieve amount of bodies
-				lastpos = findpos + 1;
-				findpos = line.find (" ", lastpos);
-				int bodyCount;
-				std::string count = line.substr(lastpos, findpos - lastpos);
-				if ( sscanf( count.c_str(), "%d", &bodyCount ) != 1 )
-				{
-					LOG4CPP_TRACE( logger, "illegal line, amount of bodies inaccessible, token: " << count );
-					continue;
-				}
-				LOG4CPP_TRACE( logger, "amount of bodies: " << bodyCount );
-				for ( int bodyIdx = 0; bodyIdx < bodyCount; bodyIdx ++ )
-				{
-					if ( lastpos > line.length() )
-					{
-						LOG4CPP_TRACE( logger, "illegal line, unexpected end of line" );
-						break;
-					}
-					// compute start pos by looking for the first '['
-					if ( (lastpos = line.find ("[", lastpos)) == std::string::npos )
-					{
-						LOG4CPP_TRACE( logger, "illegal line, next body inaccessible" );
-						break;
-					}
-					// compute end pos by looking for the 3rd ']'
-					if ( (findpos = line.find ("] ", lastpos)) == std::string::npos )
-					{
-						LOG4CPP_TRACE( logger, "last body record" );
-					}
-					// retrieve substring for body
-					std::string record = line.substr (lastpos, findpos - lastpos);
-					LOG4CPP_TRACE( logger, "record for body " << bodyIdx << " : " << record );
-					// parse substring
-					int id;
-					double qual;
-					int button;
-					double rot[6];
-					double mat[9];
-					int tokenCount = sscanf (record.c_str(), "[%d %lf %d][%lf %lf %lf][%lf %lf %lf %lf %lf %lf %lf %lf %lf]",
-							&id, &qual, &button, &rot[0], &rot[1], &rot[2],
-							&mat[0], &mat[3], &mat[6], &mat[1], &mat[4], &mat[7], &mat[2], &mat[5], &mat[8]);
-
-					if ( tokenCount != 15 ) {
-						LOG4CPP_TRACE( logger, "invalid record for body " << bodyIdx );
-						break;
-					}
-					// try to send
-					trySendPose( id, NatNetComponentKey::target_6d_measurement_tool, qual, rot, mat, timestamp );
-					// update position for line search
-					lastpos = findpos + 2;
-				}
-			}
-			else if (recordType == "6dmtr")
-			{
-				LOG4CPP_TRACE( logger, "record type: 6dmtr" );
-
-				// 6d standard bodies
-				// eg: "6d 2 [0 1.000][1092.858 -662.008 -189.740 -177.4073 27.3061 -18.7763][0.841281 0.301898 0.448447 0.286007 -0.952493 0.104679 0.458744 0.040194 -0.887659] [3 1.000][242.154 -674.257 -223.429 -105.4729 16.5325 3.4309][0.956940 -0.289719 0.018103 -0.057371 -0.249893 -0.966572 0.284559 0.923914 -0.255754] "
-				// or for DTrack2, note the subtle difference in the end!
-				// eg: "6d 2 [0 1.000][1092.858 -662.008 -189.740 -177.4073 27.3061 -18.7763][0.841281 0.301898 0.448447 0.286007 -0.952493 0.104679 0.458744 0.040194 -0.887659] [3 1.000][242.154 -674.257 -223.429 -105.4729 16.5325 3.4309][0.956940 -0.289719 0.018103 -0.057371 -0.249893 -0.966572 0.284559 0.923914 -0.255754]"
-
-				// retrieve amount of bodies
-				lastpos = findpos + 1;
-				findpos = line.find (" ", lastpos);
-				int bodyCount;
-				std::string count = line.substr(lastpos, findpos - lastpos);
-				if ( sscanf( count.c_str(), "%d", &bodyCount ) != 1 )
-				{
-					LOG4CPP_TRACE( logger, "illegal line, amount of bodies inaccessible, token: " << count );
-					continue;
-				}
-				LOG4CPP_TRACE( logger, "amount of bodies: " << bodyCount );
-				for ( int bodyIdx = 0; bodyIdx < bodyCount; bodyIdx ++ )
-				{
-					if ( lastpos > line.length() )
-					{
-						LOG4CPP_TRACE( logger, "illegal line, unexpected end of line" );
-						break;
-					}
-					// compute start pos by looking for the first '['
-					if ( (lastpos = line.find ("[", lastpos)) == std::string::npos )
-					{
-						LOG4CPP_TRACE( logger, "illegal line, next body inaccessible" );
-						break;
-					}
-					// compute end pos by looking for the 3rd ']'
-					if ( (findpos = line.find ("] ", lastpos)) == std::string::npos )
-					{
-						LOG4CPP_TRACE( logger, "last body record" );
-					}
-					// retrieve substring for body
-					std::string record = line.substr (lastpos, findpos - lastpos);
-					LOG4CPP_TRACE( logger, "record for body " << bodyIdx << " : " << record );
-					// parse substring
-					int id;
-					double qual;
-					double rot[6];
-					double mat[9];
-					int tokenCount = sscanf (record.c_str(), "[%d %lf][%lf %lf %lf][%lf %lf %lf %lf %lf %lf %lf %lf %lf]",
-							&id, &qual, &rot[0], &rot[1], &rot[2],
-							&mat[0], &mat[3], &mat[6], &mat[1], &mat[4], &mat[7], &mat[2], &mat[5], &mat[8]);
-
-					if ( tokenCount != 14 ) {
-						LOG4CPP_TRACE( logger, "invalid record for body " << bodyIdx );
-						break;
-					}
-					// try to send
-					trySendPose( id, NatNetComponentKey::target_6d_measurement_tool_reference, qual, rot, mat, timestamp );
-					// update position for line search
-					lastpos = findpos + 2;
-				}
-			}
-			else if (recordType == "gl")
-			{
-				LOG4CPP_TRACE( logger, "record type: gl" );
-
-				// fingertracker
-				// determine the number of found hands
-
-				lastpos = findpos+1;
-				findpos = line.find (" ", lastpos);
-				std::string numOfRecordsString = line.substr (lastpos, findpos-lastpos);
-				int numOfRecords = atol ( numOfRecordsString.c_str() );
-
-				lastpos = findpos+1;
-				//      while ((findpos = line.find ("] ", lastpos)) != std::string::npos) {
-
-				for (int i=0; i<numOfRecords; ++i)
-				{
-					std::string record = line.substr (lastpos);
-
-					// std::cout << "record: " << record << std::endl;
-
-					int id;
-					double qual;
-					int side;
-					int numFingers;
-
-					double rot[6];
-					double mat[9];
-					double phalanx[6];
-
-					const char* recordC = record.c_str();
-					int readChars;
-
-					sscanf (recordC,
-							"[%d %lf %d %d]%n",
-							&id, &qual, &side, &numFingers, &readChars);
-					lastpos += readChars;
-					recordC += readChars;
-
-					NatNetComponentKey::FingerSide fingerSide = (side==0)?(NatNetComponentKey::side_left):(NatNetComponentKey::side_right);
-
-					// read and send hand pose
-					sscanf (recordC,
-							"[%lf %lf %lf][%lf %lf %lf %lf %lf %lf %lf %lf %lf]%n",
-							&rot[0], &rot[1], &rot[2c],
-							&mat[0], &mat[3], &mat[6], &mat[1], &mat[4], &mat[7], &mat[2], &mat[5], &mat[8],
-							&readChars );
-					lastpos += readChars;
-					recordC += readChars;
-
-					trySendPose( id, NatNetComponentKey::target_finger, qual, rot, mat, timestamp, NatNetComponentKey::finger_hand, fingerSide );
-
-					// read and send thumb
-					sscanf (recordC,
-							"[%lf %lf %lf][%lf %lf %lf %lf %lf %lf %lf %lf %lf][%lf %lf %lf %lf %lf %lf]%n",
-							&rot[0], &rot[1], &rot[2],
-							&mat[0], &mat[3], &mat[6], &mat[1], &mat[4], &mat[7], &mat[2], &mat[5], &mat[8],
-							&phalanx[0], &phalanx[1], &phalanx[2], &phalanx[3], &phalanx[4], &phalanx[5],
-							&readChars );
-					lastpos += readChars;
-					recordC += readChars;
-
-					trySendPose( id, NatNetComponentKey::target_finger, qual, rot, mat, timestamp, NatNetComponentKey::finger_thumb, fingerSide );
-
-					// read and send index
-					sscanf (recordC,
-							"[%lf %lf %lf][%lf %lf %lf %lf %lf %lf %lf %lf %lf][%lf %lf %lf %lf %lf %lf]%n",
-							&rot[0], &rot[1], &rot[2],
-							&mat[0], &mat[3], &mat[6], &mat[1], &mat[4], &mat[7], &mat[2], &mat[5], &mat[8],
-							&phalanx[0], &phalanx[1], &phalanx[2], &phalanx[3], &phalanx[4], &phalanx[5],
-							&readChars );
-					lastpos += readChars;
-					recordC += readChars;
-
-					trySendPose( id, NatNetComponentKey::target_finger, qual, rot, mat, timestamp, NatNetComponentKey::finger_index, fingerSide );
-
-					// read and send middle
-					sscanf (recordC,
-							"[%lf %lf %lf][%lf %lf %lf %lf %lf %lf %lf %lf %lf][%lf %lf %lf %lf %lf %lf]%n",
-							&rot[0], &rot[1], &rot[2],
-							&mat[0], &mat[3], &mat[6], &mat[1], &mat[4], &mat[7], &mat[2], &mat[5], &mat[8],
-							&phalanx[0], &phalanx[1], &phalanx[2], &phalanx[3], &phalanx[4], &phalanx[5],
-							&readChars );
-					lastpos += readChars;
-					recordC += readChars;
-
-					lastpos += 1;
-
-					trySendPose( id, NatNetComponentKey::target_finger, qual, rot, mat, timestamp, NatNetComponentKey::finger_middle, fingerSide );
-				}
-			}
-			else if (recordType == "3d")
-			{
-				LOG4CPP_TRACE( logger, "record type: 3d" );
-
-				// 3dof marker
-				// determine the number of found 3dof marker
-
-				lastpos = findpos+1;
-				findpos = line.find (" ", lastpos);
-				std::string numOfRecordsString = line.substr (lastpos, findpos-lastpos);
-				int numOfRecords = atol ( numOfRecordsString.c_str() );
-
-				lastpos = findpos+1;
-
-				boost::shared_ptr< std::vector< Ubitrack::Math::Vector< 3 > > > cloud( new std::vector< Ubitrack::Math::Vector< 3 > > );
-
-				for (int i=0; i<numOfRecords; ++i)
-				{
-					std::string record = line.substr (lastpos);
-
-					int id;
-					double qual;
-
-					double rot[3];
-
-					const char* recordC = record.c_str();
-					int readChars;
-
-					sscanf (recordC,
-							"[%d %lf][%lf %lf %lf]%n",
-							&id, &qual, &rot[0], &rot[1], &rot[2], &readChars);
-					lastpos += readChars;
-					recordC += readChars;
-
-					Ubitrack::Math::Vector< 3 > pos (rot);
-					cloud->push_back( pos / 1000.0 );
-
-					lastpos += 1;
-				}
-
-				trySendPose( cloud, timestamp );
-			}
-			else if (recordType == "6dcal")
-			{
-				LOG4CPP_TRACE( logger, "record type: 6dcal" );
-
-				// 6d calibrated bodies
-				// the number of 6d calibrated bodies in the software
-				// eg: "6dcal 6"
-			}
-			else
-			{
-				LOG4CPP_TRACE( logger, "unknown record type" );
-
-				// unknown record type
-				// silently ignore
-			}
-		}
+	if (!config) {
+		UBITRACK_THROW(
+				"NatNetTracker Pattern has no \"Output\" edge");
 	}
 
-	// restart receiving new packet
-	m_pSocket->async_receive_from (
-		boost::asio::buffer ( receive_data, max_receive_length ),
-		sender_endpoint,
-		boost::bind (&NatNetModule::HandleReceive, this, boost::asio::placeholders::error, boost::asio::placeholders::bytes_transferred));
+	NatNetComponentKey::TargetType tt;
+	std::string typeString = config->getAttributeString("natnetType");
+	if (typeString.empty()) {
+		// no explicit natnet target type information. so we assume 6D
+		tt = NatNetComponentKey::target_6d;
+	} else {
+		if (typeString == "6d")
+			tt = NatNetComponentKey::target_6d;
+		else if (typeString == "3dcloud") {
+			tt = NatNetComponentKey::target_3dcloud;
+		} else
+			UBITRACK_THROW(
+					"NatNet target with unknown target type: "
+							+ typeString);
+	}
+	if ( tt == NatNetComponentKey::target_6d ) {
+		return boost::shared_ptr< ComponentClass >( new NatNetRigidBodyReceiverComponent( name, subgraph, key, pModule ) );
+	} else {
+		return boost::shared_ptr< ComponentClass >( new NatNetPointCloudReceiverComponent( name, subgraph, key, pModule ) );
+	}
 
 }
 
-
-void NatNetModule::trySendPose( int id, NatNetComponentKey::TargetType type, PointCloudData& cdata, Ubitrack::Measurement::Timestamp ts)
-{
-
-
-	//	boost::shared_ptr< std::vector< Ubitrack::Math::Vector < 3 > > > cloud, Ubitrack::Measurement::Timestamp ts )
-	boost::shared_ptr< std::vector< Ubitrack::Math::Vector < 3 > > > cloud(cdata.markersPos);
-
-	NatNetComponentKey key( id, NatNetComponentKey::target_3dcloud );
-
-	if ( hasComponent( key ) )
-	{
-		Ubitrack::Measurement::PositionList pc( ts, cloud );
-
-		getComponent( key )->getPort().send( pc );
-	}
-// 	else
-// 	{
-// 		std::cout << ":-(" << std::endl;
-// 		for (ComponentMap::iterator it = m_componentMap.begin();
-// 			 it != m_componentMap.end(); ++it)
-// 		{
-// 			boost::shared_ptr< NatNetComponent > cc(it->second);
-// 			NatNetComponentKey keyc = cc->getKey();
-// 			std::cout << "Comp: " << keyc.getBody() << " "
-// 					  << keyc.getTargetType() << " "
-// 					  << keyc.getFingerType() << " "
-// 					  << keyc.getFingerSide() << std::endl;
-// 			std::cout << "Wank: " << key.getBody() << " "
-// 					  << key.getTargetType() << " "
-// 					  << key.getFingerType() << " "
-// 					  << key.getFingerSide() << std::endl;
-// 		}
-// 	}
-
-
-}
-
-void NatNetModule::trySendPose( int id, NatNetComponentKey::TargetType type, RigidData& rdata, Ubitrack::Measurement::Timestamp ts )
-{
-    // on the network the IDs are 0 based, in the DTrack software they are 1 based..
-    NatNetComponentKey key( id, type );
-
-    // check for component
-    if ( hasComponent( key ) )
-    {
-        // generate pose
-        Ubitrack::Measurement::Pose pose( ts, Ubitrack::Math::Pose( rdata.rot, rdata.pos ) );
-
-        //send it to the component
-		LOG4CPP_TRACE( logger, "Sending pose for id " << id << " using " << getComponent( key )->getName() << ": " << pose );
-        getComponent( key )->getPort().send( pose );
-    }
-	else {
-		LOG4CPP_TRACE( logger, "No component for body id " << id+1 );
-	}
-}
 
 
 // register module at factory
