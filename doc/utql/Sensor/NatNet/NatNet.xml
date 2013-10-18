@@ -11,7 +11,8 @@
         <Output>
             <Node name="OptiTrack" displayName="OptiTrack Tracker">
                 <Description><p xmlns="http://www.w3.org/1999/xhtml">OptiTrack Tracker</p></Description>
-                <Attribute name="artPort" xsi:type="IntAttributeReferenceType"/>
+                <Attribute name="serverName" default="natnet.local" displayName="Server Name/IP" value="natnet.local" xsi:type="StringAttributeDeclarationType"/>
+                <Attribute name="clientName" displayName="Client Name/IP" xsi:type="StringAttributeDeclarationType"/>
             </Node>
             <Node name="Body" displayName="OptiTrack Marker">
                 <Description><p xmlns="http://www.w3.org/1999/xhtml">OptiTrack Tracker</p></Description>
@@ -19,18 +20,19 @@
             <Edge name="Output" displayName="Tracked Transformation" source="OptiTrack" destination="Body">
                 <Attribute name="type" value="6D" xsi:type="EnumAttributeReferenceType"/>
                 <Attribute name="mode" value="push" xsi:type="EnumAttributeReferenceType"/>
-                <Attribute name="natnetBodyName" displayName="OptiTrack body Name" default="Trackable1" xsi:type="StringAttributeDeclarationType">
+                <Attribute name="natnetBodyName" default="Trackable1" displayName="OptiTrack body Name" value="Trackable1" xsi:type="StringAttributeDeclarationType">
                     <Description><p xmlns="http://www.w3.org/1999/xhtml">Body Name used by OptiTrack (configured in TrackingTools software)</p></Description>
                 </Attribute>
-                <Attribute name="netnetBodyId" displayName="OptiTrack body ID" min="1" max="20" default="1" xsi:type="IntAttributeDeclarationType">
+                <Attribute name="natnetBodyId" displayName="OptiTrack body ID" min="1" max="20" default="1" xsi:type="IntAttributeDeclarationType">
                     <Description><p xmlns="http://www.w3.org/1999/xhtml">Body ID used by OptiTrack (configured in TrackingTools software)</p></Description>
                 </Attribute>
 
-                <Attribute name="natnetType" value="6d" xsi:type="EnumAttributeReferenceType"/>
             </Edge>
         </Output>
         <DataflowConfiguration>
             <UbitrackLib class="NatNetTracker"/>
+
+            <Attribute name="natnetType" default="6d" constant="true" displayName="Target Type" xsi:type="StringAttributeDeclarationType"/>
         </DataflowConfiguration>
     </Pattern>
 
@@ -39,8 +41,8 @@
         <Output>
             <Node name="OptiTrack" displayName="OptiTrack Tracker">
                 <Description><p xmlns="http://www.w3.org/1999/xhtml">OptiTrack Tracker</p></Description>
-                <Attribute name="serverName" default="natnet.local" xsi:type="StringAttributeReferenceType"/>
-                <Attribute name="clientName" default="" xsi:type="StringAttributeReferenceType"/>
+                <Attribute name="serverName" default="natnet.local" displayName="Server Name/IP" value="natnet.local" xsi:type="StringAttributeDeclarationType"/>
+                <Attribute name="clientName" displayName="Client Name/IP" xsi:type="StringAttributeDeclarationType"/>
             </Node>
             <Node name="PointCloud" displayName="OptiTrack PointCloud">
                 <Description><p xmlns="http://www.w3.org/1999/xhtml">OptiTrack Tracker</p></Description>
@@ -48,18 +50,18 @@
             <Edge name="Output" displayName="Tracked Transformation" source="OptiTrack" destination="PointCloud">
                 <Attribute name="type" value="3DPositionList" xsi:type="EnumAttributeReferenceType"/>
                 <Attribute name="mode" value="push" xsi:type="EnumAttributeReferenceType"/>
-                <Attribute name="natnetBodyName" displayName="OptiTrack body Name" default="Trackable1" xsi:type="StringAttributeDeclarationType">
+                <Attribute name="natnetBodyName" displayName="OptiTrack body Name" value="Trackable1" xsi:type="StringAttributeDeclarationType">
                     <Description><p xmlns="http://www.w3.org/1999/xhtml">Body Name used by OptiTrack (configured in TrackingTools software)</p></Description>
                 </Attribute>
-                <Attribute name="netnetBodyId" displayName="OptiTrack body ID" min="1" max="20" default="1" xsi:type="IntAttributeDeclarationType">
+                <Attribute name="natnetBodyId" displayName="OptiTrack body ID" min="1" max="20" default="1" xsi:type="IntAttributeDeclarationType">
                     <Description><p xmlns="http://www.w3.org/1999/xhtml">Body ID used by OptiTrack (configured in TrackingTools software)</p></Description>
                 </Attribute>
 
-                <Attribute name="natnetType" value="6d" xsi:type="EnumAttributeReferenceType"/>
             </Edge>
         </Output>
         <DataflowConfiguration>
             <UbitrackLib class="NatNetTracker"/>
+            <Attribute name="natnetType" default="3dcloud" constant="true" displayName="Target Type" xsi:type="StringAttributeDeclarationType"/>
         </DataflowConfiguration>
     </Pattern>
 
@@ -85,6 +87,9 @@
         <!-- Unfortunately, the xpointer used in Xinclude is currently restricted to the element scheme and absolute element indices in Xerces (and thus XMLBeans) -->
         <xi:include href="file:GlobalAttrSpec.xml" xpointer="element(/1/3/1)"/>
         <xi:include href="file:GlobalAttrSpec.xml" xpointer="element(/1/3/2)"/>
+        <xi:include href="file:GlobalAttrSpec.xml" xpointer="element(/1/3/3)"/>
+        <xi:include href="file:GlobalAttrSpec.xml" xpointer="element(/1/3/4)"/>
+        <xi:include href="file:GlobalAttrSpec.xml" xpointer="element(/1/3/5)"/>
     </GlobalDataflowAttributeDeclarations>
 
 </UTQLPatternTemplates>

@@ -124,8 +124,8 @@ public:
             UBITRACK_THROW( "Missing or invalid \"natnetBodyId\" or \"natnetBodyName\" attribute on \"Output\" edge" );
 
 
-
-	  std::string typeString = config->getAttributeString( "natnetType" );
+	  // type of the component
+	  std::string typeString = subgraph->m_DataflowAttributes.getAttributeString( "natnetType" );
 	  if ( typeString.empty() )
 	  {
 	      // no explicit natnet target type information. so we assume 6D
@@ -273,7 +273,7 @@ private:
     bool serverInfoReceived;
     bool modelInfoReceived;
 
-    static boost::asio::io_service& get_io_service();
+    static boost::asio::io_service ios;
     static boost::asio::ip::udp::resolver& get_resolver();
 
     std::string m_serverName;

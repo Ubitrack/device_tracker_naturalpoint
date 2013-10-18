@@ -149,19 +149,13 @@ struct sPacket
 
 using boost::asio::ip::udp;
 
-boost::asio::io_service& NatNetModule::get_io_service()
-{
-    static boost::asio::io_service io_service;
-    return io_service;
-}
-
 boost::asio::ip::udp::resolver& NatNetModule::get_resolver()
 {
-    static boost::asio::ip::udp::resolver resolver(get_io_service());
+    static boost::asio::ip::udp::resolver resolver(ios);
     return resolver;
 }
 
-
+boost::asio::io_service NatNetModule::ios;
 
 NatNetModule::NatNetModule( const NatNetModuleKey& moduleKey, boost::shared_ptr< Graph::UTQLSubgraph > subgraph, FactoryHelper* pFactory )
 	: Module< NatNetModuleKey, NatNetComponentKey, NatNetModule, NatNetComponent >( moduleKey, pFactory )
@@ -176,10 +170,10 @@ NatNetModule::NatNetModule( const NatNetModuleKey& moduleKey, boost::shared_ptr<
     , m_clientName("")
 {
 
-	Graph::UTQLSubgraph::EdgePtr config;
+	Graph::UTQLSubgraph::NodePtr config;
 
-	if ( subgraph->hasEdge( "Output" ) )
-	  config = subgraph->getEdge( "Output" );
+	if ( subgraph->hasNode( "OptiTrack" ) )
+	  config = subgraph->getNode( "OptiTrack" );
 
 	if ( !config )
 	{
@@ -201,10 +195,7 @@ NatNetComponent::~NatNetComponent()
 // see also http://www.boost.org/doc/libs/1_44_0/doc/html/boost_asio/overview/core/threads.html)
 void NatNetModule::startModule()
 {
-	LOG4CPP_INFO( logger, "Creating NatNet network service on port " << m_moduleKey.get() );
-
-	LOG4CPP_DEBUG( logger, "Starting network receiver thread" );
-	m_pNetworkThread = boost::shared_ptr< boost::thread >( new boost::thread( boost::bind( static_cast<size_t (boost::asio::io_service::*)()>(&boost::asio::io_service::run), get_io_service() ) ) );
+	LOG4CPP_INFO( logger, "Creating NatNet for server: " << m_moduleKey.get() );
 
     if (command_socket) delete command_socket; command_socket = NULL;
     if (data_socket) delete data_socket; data_socket = NULL;
@@ -212,50 +203,50 @@ void NatNetModule::startModule()
     boost::system::error_code ec;
 
     {
-    	LOG4CPP_DEBUG( logger, "Resolving " <<  m_serverName << std::endl);
+    	LOG4CPP_DEBUG( logger, "Resolving " <<  m_serverName );
 
         udp::resolver::query query(udp::v4(), m_serverName, "0");
         udp::resolver::iterator result = get_resolver().resolve(query, ec);
         if (ec)
         {
-        	LOG4CPP_ERROR( logger, ec.category().name() << " ERROR while resolving " << m_serverName << " : " << ec.message() << std::endl);
+        	LOG4CPP_ERROR( logger, ec.category().name() << " ERROR while resolving " << m_serverName << " : " << ec.message() );
             return;
         }
 
         server_endpoint = *result;
         server_endpoint.port(PORT_COMMAND);
-        LOG4CPP_DEBUG( logger, "Resolved " <<  m_serverName << " to " << server_endpoint << std::endl);
+        LOG4CPP_DEBUG( logger, "Resolved " <<  m_serverName << " to " << server_endpoint );
     }
 
     udp::endpoint client_endpoint(udp::v4(), PORT_DATA);
     if (!(m_clientName == ""))
     {
-    	LOG4CPP_DEBUG( logger, "Resolving " <<  m_clientName << std::endl);
+    	LOG4CPP_DEBUG( logger, "Resolving " <<  m_clientName );
         udp::resolver::query query(udp::v4(), m_clientName, "0");
         udp::resolver::iterator result = get_resolver().resolve(query, ec);
         if (ec)
         {
-        	LOG4CPP_ERROR( logger, ec.category().name() << " ERROR while resolving " << m_clientName << " : " << ec.message() << std::endl);
+        	LOG4CPP_ERROR( logger, ec.category().name() << " ERROR while resolving " << m_clientName << " : " << ec.message() );
             return;
         }
 
         client_endpoint = *result;
         client_endpoint.port(PORT_DATA);
-        LOG4CPP_DEBUG( logger, "Resolved " <<  m_clientName << " to " << client_endpoint << std::endl);
+        LOG4CPP_DEBUG( logger, "Resolved " <<  m_clientName << " to " << client_endpoint );
     }
 
-    LOG4CPP_DEBUG( logger, "Opening data socket on " <<  client_endpoint << std::endl);
-    data_socket = new udp::socket(get_io_service());
+    LOG4CPP_DEBUG( logger, "Opening data socket on " <<  client_endpoint );
+    data_socket = new udp::socket(ios);
     if (data_socket->open(udp::v4(), ec))
     {
-    	LOG4CPP_ERROR( logger, ec.category().name() << " ERROR while opening data socket : " << ec.message() << std::endl);
+    	LOG4CPP_ERROR( logger, ec.category().name() << " ERROR while opening data socket : " << ec.message() );
         return;
     }
 
     data_socket->set_option(udp::socket::reuse_address(true));
     if (data_socket->bind(client_endpoint, ec))
     {
-    	LOG4CPP_ERROR( logger, ec.category().name() << " ERROR while binding data socket : " << ec.message() << std::endl);
+    	LOG4CPP_ERROR( logger, ec.category().name() << " ERROR while binding data socket : " << ec.message() );
         return;
     }
 
@@ -265,15 +256,15 @@ void NatNetModule::startModule()
     else
         data_socket->set_option(boost::asio::ip::multicast::join_group(boost::asio::ip::address::from_string(MULTICAST_ADDRESS)));
 
-    LOG4CPP_DEBUG( logger, "Data socket ready" << std::endl);
+    LOG4CPP_DEBUG( logger, "Data socket ready" );
     start_data_receive();
 
-    LOG4CPP_DEBUG( logger, "Opening command socket" << std::endl);
+    LOG4CPP_DEBUG( logger, "Opening command socket" );
 
-    command_socket = new udp::socket(get_io_service());
+    command_socket = new udp::socket(ios);
     if (command_socket->open(udp::v4(), ec))
     {
-    	LOG4CPP_ERROR( logger, ec.category().name() << " ERROR while opening command socket : " << ec.message() << std::endl);
+    	LOG4CPP_ERROR( logger, ec.category().name() << " ERROR while opening command socket : " << ec.message() );
         return;
     }
 
@@ -282,19 +273,24 @@ void NatNetModule::startModule()
         client_endpoint.port(0);
         if (command_socket->bind(client_endpoint, ec))
         {
-        	LOG4CPP_ERROR( logger, ec.category().name() << " ERROR while binding command socket : " << ec.message() << std::endl);
+        	LOG4CPP_ERROR( logger, ec.category().name() << " ERROR while binding command socket : " << ec.message() );
             return;
         }
     }
 
-    LOG4CPP_DEBUG( logger, "Command socket ready" << std::endl);
+    LOG4CPP_DEBUG( logger, "Command socket ready" );
     start_command_receive();
+
+
+
+	LOG4CPP_DEBUG( logger, "Starting network receiver thread" );
+	m_pNetworkThread = boost::shared_ptr< boost::thread >( new boost::thread(  boost::bind( &boost::asio::io_service::run, &(this->ios) ) ) );
 
     //boost::shared_pointer<sPacket> helloMsg = new sPacket;
     //helloMsg.iMessage = NAT_PING;
     //helloMsg.nDataBytes = 0;
 
-    LOG4CPP_DEBUG( logger, "Sending hello message..." << std::endl);
+    LOG4CPP_DEBUG( logger, "Sending hello message..." );
 
     boost::array<unsigned short, 2> helloMsg;
     helloMsg[0] = NAT_PING; helloMsg[1] = 0;
@@ -313,7 +309,7 @@ void NatNetModule::stopModule()
 	// XXX any other cleanup necessary ??
 
 	// stop the network thread
-	get_io_service().stop();
+	ios.stop();
 
 	LOG4CPP_DEBUG( logger, "Waiting for network thread to stop..." );
 	m_pNetworkThread->join();
@@ -346,17 +342,17 @@ void NatNetModule::handle_command_receive(const boost::system::error_code& ec, s
 {
     if (ec)
     {
-        LOG4CPP_ERROR( logger, ec.category().name() << " ERROR while receiving command from " << recv_command_endpoint << std::endl);
+        LOG4CPP_ERROR( logger, ec.category().name() << " ERROR while receiving command from " << recv_command_endpoint );
     }
     else
     {
-    	LOG4CPP_TRACE( logger, "Received " << bytes_transferred << "b command from " << recv_command_endpoint << std::endl);
+    	LOG4CPP_TRACE( logger, "Received " << bytes_transferred << "b command from " << recv_command_endpoint );
         sPacket& PacketIn = *recv_command_packet;
         switch (PacketIn.iMessage)
         {
         case NAT_MODELDEF:
         {
-        	LOG4CPP_DEBUG( logger, "Received MODELDEF" << std::endl);
+        	LOG4CPP_DEBUG( logger, "Received MODELDEF" );
             if (serverInfoReceived)
             {
                 decodeModelDef(PacketIn);
@@ -365,7 +361,7 @@ void NatNetModule::handle_command_receive(const boost::system::error_code& ec, s
             {
                 server_endpoint = recv_command_endpoint;
                 server_endpoint.port(PORT_COMMAND);
-                LOG4CPP_INFO( logger, "Requesting server info to " << server_endpoint << std::endl);
+                LOG4CPP_INFO( logger, "Requesting server info to " << server_endpoint );
                 boost::array<unsigned short, 2> helloMsg;
                 helloMsg[0] = NAT_PING; helloMsg[1] = 0;
                 command_socket->send_to(boost::asio::buffer(helloMsg), server_endpoint);
@@ -374,7 +370,7 @@ void NatNetModule::handle_command_receive(const boost::system::error_code& ec, s
         }
         case NAT_FRAMEOFDATA:
         {
-            LOG4CPP_INFO( logger, "Received FRAMEOFDATA" << std::endl);
+            LOG4CPP_INFO( logger, "Received FRAMEOFDATA" );
             if (serverInfoReceived)
             {
                 decodeFrame(PacketIn);
@@ -383,7 +379,7 @@ void NatNetModule::handle_command_receive(const boost::system::error_code& ec, s
             {
                 server_endpoint = recv_command_endpoint;
                 server_endpoint.port(PORT_COMMAND);
-                LOG4CPP_INFO( logger, "Requesting server info to " << server_endpoint << std::endl);
+                LOG4CPP_INFO( logger, "Requesting server info to " << server_endpoint );
                 boost::array<unsigned short, 2> helloMsg;
                 helloMsg[0] = NAT_PING; helloMsg[1] = 0;
                 command_socket->send_to(boost::asio::buffer(helloMsg), server_endpoint);
@@ -416,8 +412,7 @@ void NatNetModule::handle_command_receive(const boost::system::error_code& ec, s
             	msg << "." << (int)natNetVersion[2];
             if (natNetVersion[3])
             	msg << "." << (int)natNetVersion[3];
-            msg << std::endl;
-            LOG4CPP_INFO( logger, msg);
+            LOG4CPP_INFO( logger, msg.str());
 
             // request scene info
             boost::array<unsigned short, 2> reqMsg;
@@ -427,22 +422,22 @@ void NatNetModule::handle_command_receive(const boost::system::error_code& ec, s
         }
         case NAT_RESPONSE:
         {
-            LOG4CPP_DEBUG( logger, "Received response : " << PacketIn.Data.szData << std::endl);
+            LOG4CPP_DEBUG( logger, "Received response : " << PacketIn.Data.szData );
             break;
         }
         case NAT_UNRECOGNIZED_REQUEST:
         {
-            LOG4CPP_ERROR( logger, "Received 'unrecognized request'" << std::endl);
+            LOG4CPP_ERROR( logger, "Received 'unrecognized request'" );
             break;
         }
         case NAT_MESSAGESTRING:
         {
-            LOG4CPP_INFO( logger, "Received message: " << PacketIn.Data.szData << std::endl);
+            LOG4CPP_INFO( logger, "Received message: " << PacketIn.Data.szData );
             break;
         }
         default:
         {
-            LOG4CPP_ERROR( logger, "Received unrecognized command packet type: " << PacketIn.iMessage << std::endl);
+            LOG4CPP_ERROR( logger, "Received unrecognized command packet type: " << PacketIn.iMessage );
             break;
         }
         }
@@ -464,17 +459,17 @@ void NatNetModule::handle_data_receive(const boost::system::error_code& ec,
 {
     if (ec)
     {
-        LOG4CPP_ERROR( logger, ec.category().name() << " ERROR while receiving data from " << recv_data_endpoint << std::endl);
+        LOG4CPP_ERROR( logger, ec.category().name() << " ERROR while receiving data from " << recv_data_endpoint );
     }
     else
     {
-        LOG4CPP_DEBUG( logger, "Received " << bytes_transferred << "b data from " << recv_data_endpoint << std::endl);
+        LOG4CPP_DEBUG( logger, "Received " << bytes_transferred << "b data from " << recv_data_endpoint );
         sPacket& PacketIn = *recv_data_packet;
         switch (PacketIn.iMessage)
         {
         case NAT_MODELDEF:
         {
-        	LOG4CPP_DEBUG( logger, "Received MODELDEF" << std::endl);
+        	LOG4CPP_DEBUG( logger, "Received MODELDEF" );
             if (serverInfoReceived)
             {
                 decodeModelDef(PacketIn);
@@ -483,7 +478,7 @@ void NatNetModule::handle_data_receive(const boost::system::error_code& ec,
             {
                 server_endpoint = recv_data_endpoint;
                 server_endpoint.port(PORT_COMMAND);
-                LOG4CPP_INFO( logger, "Requesting server info to " << server_endpoint << std::endl);
+                LOG4CPP_INFO( logger, "Requesting server info to " << server_endpoint );
                 boost::array<unsigned short, 2> helloMsg;
                 helloMsg[0] = NAT_PING; helloMsg[1] = 0;
                 command_socket->send_to(boost::asio::buffer(helloMsg), server_endpoint);
@@ -492,7 +487,7 @@ void NatNetModule::handle_data_receive(const boost::system::error_code& ec,
         }
         case NAT_FRAMEOFDATA:
         {
-        	LOG4CPP_DEBUG( logger, "Received FRAMEOFDATA" << std::endl);
+        	LOG4CPP_DEBUG( logger, "Received FRAMEOFDATA" );
             if (serverInfoReceived)
             {
                 decodeFrame(PacketIn);
@@ -501,7 +496,7 @@ void NatNetModule::handle_data_receive(const boost::system::error_code& ec,
             {
                 server_endpoint = recv_data_endpoint;
                 server_endpoint.port(PORT_COMMAND);
-                LOG4CPP_INFO( logger, "Requesting server info to " << server_endpoint << std::endl);
+                LOG4CPP_INFO( logger, "Requesting server info to " << server_endpoint );
                 boost::array<unsigned short, 2> helloMsg;
                 helloMsg[0] = NAT_PING; helloMsg[1] = 0;
                 command_socket->send_to(boost::asio::buffer(helloMsg), server_endpoint);
@@ -510,7 +505,7 @@ void NatNetModule::handle_data_receive(const boost::system::error_code& ec,
         }
         default:
         {
-            LOG4CPP_ERROR( logger, "Received unrecognized data packet type: " << PacketIn.iMessage << std::endl);
+            LOG4CPP_ERROR( logger, "Received unrecognized data packet type: " << PacketIn.iMessage );
             break;
         }
         }
@@ -521,6 +516,9 @@ void NatNetModule::handle_data_receive(const boost::system::error_code& ec,
 template<class T>
 static void memread(T& dest, const unsigned char*& ptr, const unsigned char*& end, const char* fieldName=NULL)
 {
+	if (fieldName)
+	    	LOG4CPP_TRACE( logger, "memread1 " << fieldName << " size " << sizeof(T));
+
     if (ptr + sizeof(T) <= end)
     {
         dest = *(const T*)ptr;
@@ -542,9 +540,14 @@ static void memread(T& dest, const unsigned char*& ptr, const unsigned char*& en
 
 static void memread(const char*& dest, const unsigned char*& ptr, const unsigned char*& end, const char* fieldName=NULL)
 {
+
     unsigned int len = 0;
     while (ptr+len < end && ptr[len])
         ++len;
+
+    if (fieldName)
+    	LOG4CPP_TRACE( logger, "memread2 " << fieldName << " size " << len);
+
     if (end-ptr > len)
     {
         dest = (const char*) ptr;
@@ -567,6 +570,8 @@ static void memread(const char*& dest, const unsigned char*& ptr, const unsigned
 template<class T>
 static void memread(const T*& dest, int n, const unsigned char*& ptr, const unsigned char*& end, const char* fieldName=NULL)
 {
+	if (fieldName)
+	    	LOG4CPP_TRACE( logger, "memread3 " << fieldName << " elements " << n << " size " << sizeof(T));
     if (n <= 0)
         dest = NULL;
     else if (ptr + n*sizeof(T) <= end)
@@ -587,10 +592,13 @@ static void memread(const T*& dest, int n, const unsigned char*& ptr, const unsi
         }
     }
 }
-/*
-static void memread(Ubitrack::Math::Vector3& dest, const unsigned char*& ptr, const unsigned char*& end, const char* fieldName=NULL)
+
+static void memread(Ubitrack::Math::Vector< 3, float >& dest, const unsigned char*& ptr, const unsigned char*& end, const char* fieldName=NULL)
 {
-    if (ptr + sizeof(float[3]) <= end)
+	if (fieldName)
+	    	LOG4CPP_TRACE( logger, "memread vec3 " << fieldName << " size " << sizeof(float[3]));
+
+	if (ptr + sizeof(float[3]) <= end)
     {
         ptr += sizeof(float[3]);
         dest = Ubitrack::Math::Vector3(((const float*)ptr)[0], ((const float*)ptr)[1], ((const float*)ptr)[2]);
@@ -609,6 +617,7 @@ static void memread(Ubitrack::Math::Vector3& dest, const unsigned char*& ptr, co
     }
 }
 
+/*
 static void memread(Ubitrack::Math::Quaternion& dest, const unsigned char*& ptr, const unsigned char*& end, const char* fieldName=NULL)
 {
     if (ptr + sizeof(float[4]) <= end)
@@ -739,7 +748,7 @@ void NatNetModule::decodeFrame(const sPacket& data)
     memread(frame.latency, ptr,end,"latency");
     if (ptr != end)
     {
-	    LOG4CPP_DEBUG( logger, "decodeFrame: extra " << end-ptr << " bytes at end of message" << std::endl);
+	    LOG4CPP_DEBUG( logger, "decodeFrame: extra " << end-ptr << " bytes at end of message" );
     }
 
 
@@ -783,6 +792,8 @@ void NatNetModule::decodeModelDef(const sPacket& data)
 
     int nDatasets = 0;
     memread(nDatasets,ptr,end,"nDatasets");
+
+    LOG4CPP_TRACE( logger, "ModelDef nDatasets: " << nDatasets);
 
     for(int i=0; i < nDatasets; i++)
     {
@@ -845,7 +856,7 @@ void NatNetModule::decodeModelDef(const sPacket& data)
         }
         default:
         {
-            LOG4CPP_ERROR( logger, "decodeModelDef: unknown type " << type << std::endl);
+            LOG4CPP_ERROR( logger, "decodeModelDef: unknown type " << type );
         }
         }
     }
@@ -892,7 +903,7 @@ void NatNetModule::processFrame(const FrameData* data)
 		// (daniel) better synchronize the DTrack controller to a common NTP server and use "ts" fields directly.
 		//          This should work well at least with NatNettrack2/3 cameras (not necessarily NatNettrack/TP)
 
-		LOG4CPP_DEBUG( logger , "NatNet Latency: " << data->latency << std::endl);
+		LOG4CPP_DEBUG( logger , "NatNet Latency: " << data->latency );
 		// substract from timestamp .. instead of constant.
 		timestamp -= 19000000;
 
@@ -986,9 +997,9 @@ void NatNetModule::processModelDef(const ModelDef* data)
     		bodyIdMap[data->rigids[i].ID] = getComponent( key )->getKey().getBody();
 
     		if (getComponent( key )->getKey().getName() != data->rigids[i].name) {
-        		LOG4CPP_WARN( logger, "Received RigidBodyDef: " << data->rigids[i].name << " but configured name does not match: " << getComponent( key )->getKey().getName() << std::endl);
+        		LOG4CPP_WARN( logger, "Received RigidBodyDef: " << data->rigids[i].name << " but configured name does not match: " << getComponent( key )->getKey().getName() );
     		} else {
-        		LOG4CPP_INFO( logger, "Receiver connected for Rigid Body: " << data->rigids[i].name << std::endl);
+        		LOG4CPP_INFO( logger, "Receiver connected for Rigid Body: " << data->rigids[i].name );
     		}
     	} else {
 
@@ -996,13 +1007,13 @@ void NatNetModule::processModelDef(const ModelDef* data)
             {
         		if (bodyNameIdMap.count(data->rigids[i].name) > 0) {
         			bodyIdMap[data->rigids[i].ID] = bodyNameIdMap[data->rigids[i].name];
-            		LOG4CPP_INFO( logger, "Receiver connected for Rigid Body: " << data->rigids[i].name << std::endl);
+            		LOG4CPP_INFO( logger, "Receiver connected for Rigid Body: " << data->rigids[i].name );
         		} else {
-            		LOG4CPP_WARN( logger, "Received RigidBodyDef: " << data->rigids[i].name << " but receiver component was not found." << std::endl);
+            		LOG4CPP_WARN( logger, "Received RigidBodyDef: " << data->rigids[i].name << " but receiver component was not found." );
         		}
 
             } else {
-            	LOG4CPP_WARN( logger, "Received RigidBodyDef without name and found no matching component for ID:" << data->rigids[i].ID << "." << std::endl);
+            	LOG4CPP_WARN( logger, "Received RigidBodyDef without name and found no matching component for ID:" << data->rigids[i].ID << "." );
             }
 
 
@@ -1018,9 +1029,9 @@ void NatNetModule::processModelDef(const ModelDef* data)
         if (data->pointClouds[i].name)
         {
         	if (pointcloudNameIdMap.count(data->rigids[i].name) > 0) {
-        		LOG4CPP_INFO( logger, "Receiver connected for Pointcloud: " << data->pointClouds[i].name << std::endl);
+        		LOG4CPP_INFO( logger, "Receiver connected for Pointcloud: " << data->pointClouds[i].name );
         	} else {
-        		LOG4CPP_WARN( logger, "Received PointCloudDef: " << data->pointClouds[i].name << " but receiver component was not found." << std::endl);
+        		LOG4CPP_WARN( logger, "Received PointCloudDef: " << data->pointClouds[i].name << " but receiver component was not found." );
         	}
         }
     }
@@ -1032,18 +1043,8 @@ void NatNetModule::processModelDef(const ModelDef* data)
 boost::shared_ptr< NatNetModule::ComponentClass > NatNetModule::createComponent( const std::string&, const std::string& name, boost::shared_ptr< Graph::UTQLSubgraph> subgraph,
 	const ComponentKey& key, ModuleClass* pModule )
 {
-	Graph::UTQLSubgraph::EdgePtr config;
-
-	if (subgraph->hasEdge("Output"))
-		config = subgraph->getEdge("Output");
-
-	if (!config) {
-		UBITRACK_THROW(
-				"NatNetTracker Pattern has no \"Output\" edge");
-	}
-
 	NatNetComponentKey::TargetType tt;
-	std::string typeString = config->getAttributeString("natnetType");
+	std::string typeString = subgraph->m_DataflowAttributes.getAttributeString("natnetType");
 	if (typeString.empty()) {
 		// no explicit natnet target type information. so we assume 6D
 		tt = NatNetComponentKey::target_6d;
