@@ -218,7 +218,11 @@ void NatNetModule::startModule()
         LOG4CPP_DEBUG( logger, "Resolved " <<  m_serverName << " to " << server_endpoint );
     }
 
+
+    udp::endpoint mc_endpoint(boost::asio::ip::address::from_string( MULTICAST_ADDRESS ), PORT_DATA);
     udp::endpoint client_endpoint(udp::v4(), PORT_DATA);
+
+
     if (!(m_clientName == ""))
     {
     	LOG4CPP_DEBUG( logger, "Resolving " <<  m_clientName );
@@ -244,7 +248,7 @@ void NatNetModule::startModule()
     }
 
     data_socket->set_option(udp::socket::reuse_address(true));
-    if (data_socket->bind(client_endpoint, ec))
+    if (data_socket->bind(mc_endpoint, ec))
     {
     	LOG4CPP_ERROR( logger, ec.category().name() << " ERROR while binding data socket : " << ec.message() );
         return;
@@ -254,7 +258,7 @@ void NatNetModule::startModule()
     if (!(m_clientName == ""))
         data_socket->set_option(boost::asio::ip::multicast::join_group(boost::asio::ip::address::from_string(MULTICAST_ADDRESS).to_v4(), client_endpoint.address().to_v4()));
     else
-        data_socket->set_option(boost::asio::ip::multicast::join_group(boost::asio::ip::address::from_string(MULTICAST_ADDRESS)));
+        data_socket->set_option(boost::asio::ip::multicast::join_group(boost::asio::ip::address::from_string(MULTICAST_ADDRESS).to_v4()));
 
     LOG4CPP_DEBUG( logger, "Data socket ready. PacketSize = " << sizeof(sPacket) );
     start_data_receive();
@@ -352,7 +356,7 @@ void NatNetModule::handle_command_receive(const boost::system::error_code& ec, s
         {
         case NAT_MODELDEF:
         {
-        	LOG4CPP_DEBUG( logger, "Received MODELDEF" );
+        	LOG4CPP_TRACE( logger, "Received MODELDEF" );
             if (serverInfoReceived)
             {
                 decodeModelDef(PacketIn);
@@ -370,7 +374,7 @@ void NatNetModule::handle_command_receive(const boost::system::error_code& ec, s
         }
         case NAT_FRAMEOFDATA:
         {
-            LOG4CPP_INFO( logger, "Received FRAMEOFDATA" );
+        	LOG4CPP_TRACE( logger, "Received FRAMEOFDATA" );
             if (serverInfoReceived)
             {
                 decodeFrame(PacketIn);
@@ -422,12 +426,12 @@ void NatNetModule::handle_command_receive(const boost::system::error_code& ec, s
         }
         case NAT_RESPONSE:
         {
-            LOG4CPP_DEBUG( logger, "Received response : " << PacketIn.Data.szData );
+        	LOG4CPP_TRACE( logger, "Received response : " << PacketIn.Data.szData );
             break;
         }
         case NAT_UNRECOGNIZED_REQUEST:
         {
-            LOG4CPP_ERROR( logger, "Received 'unrecognized request'" );
+        	LOG4CPP_TRACE( logger, "Received 'unrecognized request'" );
             break;
         }
         case NAT_MESSAGESTRING:
@@ -463,13 +467,13 @@ void NatNetModule::handle_data_receive(const boost::system::error_code& ec,
     }
     else
     {
-        LOG4CPP_DEBUG( logger, "Received " << bytes_transferred << "b data from " << recv_data_endpoint );
+        LOG4CPP_TRACE( logger, "Received " << bytes_transferred << "b data from " << recv_data_endpoint );
         sPacket& PacketIn = *recv_data_packet;
         switch (PacketIn.iMessage)
         {
         case NAT_MODELDEF:
         {
-        	LOG4CPP_DEBUG( logger, "Received MODELDEF" );
+        	LOG4CPP_TRACE( logger, "Received MODELDEF" );
             if (serverInfoReceived)
             {
                 decodeModelDef(PacketIn);
@@ -487,7 +491,7 @@ void NatNetModule::handle_data_receive(const boost::system::error_code& ec,
         }
         case NAT_FRAMEOFDATA:
         {
-        	LOG4CPP_DEBUG( logger, "Received FRAMEOFDATA" );
+        	LOG4CPP_TRACE( logger, "Received FRAMEOFDATA" );
             if (serverInfoReceived)
             {
                 decodeFrame(PacketIn);
@@ -596,12 +600,12 @@ static void memread(const T*& dest, int n, const unsigned char*& ptr, const unsi
 static void memread(Ubitrack::Math::Vector< 3, float >& dest, const unsigned char*& ptr, const unsigned char*& end, const char* fieldName=NULL)
 {
 	if (fieldName)
-	    	LOG4CPP_TRACE( logger, "memread vec3 " << fieldName << " size " << sizeof(float[3]));
+	    	LOG4CPP_TRACE( logger, "memread vec3 " << fieldName << " size " << sizeof(float)*3);
 
-	if (ptr + sizeof(float[3]) <= end)
+	if (ptr + sizeof(float)*3 <= end)
     {
-        ptr += sizeof(float[3]);
         dest = Ubitrack::Math::Vector3(((const float*)ptr)[0], ((const float*)ptr)[1], ((const float*)ptr)[2]);
+        ptr += sizeof(float)*3;
     }
     else
     {
@@ -617,17 +621,19 @@ static void memread(Ubitrack::Math::Vector< 3, float >& dest, const unsigned cha
     }
 }
 
-/*
-static void memread(Ubitrack::Math::Quaternion& dest, const unsigned char*& ptr, const unsigned char*& end, const char* fieldName=NULL)
+static void memread(Ubitrack::Math::Vector< 4, float >& dest, const unsigned char*& ptr, const unsigned char*& end, const char* fieldName=NULL)
 {
-    if (ptr + sizeof(float[4]) <= end)
+	if (fieldName)
+	    	LOG4CPP_TRACE( logger, "memread vec4 " << fieldName << " size " << sizeof(float)*4);
+
+	if (ptr + sizeof(float)*4 <= end)
     {
-        ptr += sizeof(float[4]);
-        dest = Ubitrack::Math::Quaternion(((const float*)ptr)[0], ((const float*)ptr)[1], ((const float*)ptr)[2], ((const float*)ptr)[3]);
+        dest = Ubitrack::Math::Vector4(((const float*)ptr)[0], ((const float*)ptr)[1], ((const float*)ptr)[2], ((const float*)ptr)[3]);
+        ptr += sizeof(float)*4;
     }
     else
     {
-        dest = Ubitrack::Math::Quaternion(0,0,0,1);
+        dest = Ubitrack::Math::Vector4(0,0,0,1);
         if (ptr != end)
         {
         	std::stringstream msg;
@@ -639,7 +645,34 @@ static void memread(Ubitrack::Math::Quaternion& dest, const unsigned char*& ptr,
     }
 }
 
-*/
+static void memread(std::vector< Ubitrack::Math::Vector< 3, float > >& dest, int n, const unsigned char*& ptr, const unsigned char*& end, const char* fieldName=NULL)
+{
+	if (fieldName)
+	    	LOG4CPP_TRACE( logger, "memread vec3* " << fieldName << " elements " << n << " size " << sizeof(float)*3);
+    if (n <= 0)
+        dest.clear();
+    else if (ptr + n*sizeof(float)*3 <= end)
+    {
+    	dest.resize(n);
+    	for (int i=0; i < n; i++) {
+    		dest.at(i) = Ubitrack::Math::Vector< 3, float >(((const float*)ptr)[0],((const float*)ptr)[1],((const float*)ptr)[2]);
+            ptr += sizeof(float)*3;
+    	}
+    }
+    else
+    {
+        dest.clear();
+        if (ptr != end)
+        {
+        	std::stringstream msg;
+        	msg << "OptiTrackNatNet decode ERROR: end of message reached";
+            if (fieldName) msg << " while reading " << n << " values for array " << fieldName << std::endl;
+            LOG4CPP_DEBUG( logger, msg );
+            ptr = end;
+        }
+    }
+}
+
 
 void NatNetModule::decodeFrame(const sPacket& data)
 {
@@ -705,7 +738,7 @@ void NatNetModule::decodeFrame(const sPacket& data)
         }
     }
 
-    if (major <= 1 || (major == 2 && minor <= 0))
+    if ((major <= 1) || ((major == 2) && (minor <= 0)))
     {
         frame.nSkeletons = 0;
         frame.skeletons = NULL;
@@ -745,7 +778,34 @@ void NatNetModule::decodeFrame(const sPacket& data)
             }
         }
     }
+
+    if ((major > 2) || ((major == 2) && (minor >= 3))) {
+		memread(frame.nLabeledMarkers, ptr, end, "frame.nLabeledMarkers");
+		if (frame.nLabeledMarkers <= 0)
+			frame.labeledMarkersPos = NULL;
+		else
+		{
+			frame.labeledMarkersPos = new MarkerData[frame.nLabeledMarkers];
+			for (int iM = 0; iM < frame.nLabeledMarkers; iM++) {
+				MarkerData& mdata = frame.labeledMarkersPos[iM];
+				memread(mdata.ID, ptr, end, "mdata.ID");
+				memread(mdata.pos, ptr, end, "mdata.pos");
+				memread(mdata.markersSize, ptr, end, "mdata.markersSize");
+			}
+		}
+	}
+	else
+	{
+		frame.nLabeledMarkers = 0;
+		frame.labeledMarkersPos = NULL;
+	}
+
     memread(frame.latency, ptr,end,"latency");
+
+    memread(frame.timecode, ptr,end,"timecode");
+    memread(frame.timecodeSub, ptr,end,"timecodeSub");
+    memread(frame.eod, ptr,end,"eod");
+
     if (ptr != end)
     {
 	    LOG4CPP_DEBUG( logger, "decodeFrame: extra " << end-ptr << " bytes at end of message" );
@@ -894,7 +954,7 @@ void NatNetModule::processFrame(const FrameData* data)
 
 	// use synchronizer to correct timestamps
 	// XXX is this correct ??
-	timestamp = m_synchronizer.convertNativeToLocal( data->frameNumber, timestamp );
+	//timestamp = m_synchronizer.convertNativeToLocal( data->frameNumber, timestamp );
 
 	if ( m_running )
 	{
@@ -905,7 +965,7 @@ void NatNetModule::processFrame(const FrameData* data)
 
 		LOG4CPP_DEBUG( logger , "NatNet Latency: " << data->latency );
 		// substract from timestamp .. instead of constant.
-		timestamp -= 19000000;
+		//timestamp -= 19000000;
 
 		for (int i=0; i<data->nRigids; ++i) {
 
@@ -913,20 +973,43 @@ void NatNetModule::processFrame(const FrameData* data)
 		    // on the network the IDs are 0 based, in the DTrack software they are 1 based..
 		    NatNetComponentKey key( id, NatNetComponentKey::target_6d );
 
+		    // check for non-recognized markers (all sub-markers are at (0,0,0))
+		    bool is_recognized = true;
+		    if (data->rigids[i].nMarkers > 0) {
+		    	LOG4CPP_DEBUG( logger , "DBG1  " << data->rigids[i].markersPos[0]);
+			    if ((data->rigids[i].markersPos[0](0) == 0) &&
+			    		(data->rigids[i].markersPos[0](1) == 0) &&
+			    		(data->rigids[i].markersPos[0](1) == 0)) {
+			    	LOG4CPP_DEBUG( logger , "DBG3" );
+					for (int j=1; j < data->rigids[i].nMarkers; j++) {
+				    	LOG4CPP_DEBUG( logger , "DBG4" );
+						if ((data->rigids[i].markersPos[j-1](0) == data->rigids[i].markersPos[j](0)) &&
+							(data->rigids[i].markersPos[j-1](1) == data->rigids[i].markersPos[j](1)) &&
+							(data->rigids[i].markersPos[j-1](2) == data->rigids[i].markersPos[j](2))) {
+							is_recognized = false;
+						}
+					}
+			    }
+		    }
+
+		    if (!is_recognized) {
+		    	continue;
+		    }
+
 		    // check for component
 		    if ( hasComponent( key ) )
 		    {
 		        // generate pose
 		        Ubitrack::Measurement::Pose pose( timestamp,
 		        	Ubitrack::Math::Pose(
-		        		Ubitrack::Math::Quaternion(data->rigids[i].rot(0), data->rigids[i].rot(1), data->rigids[i].rot(2), data->rigids[i].rot(3)),
-		        		Ubitrack::Math::Vector < 3 >(data->rigids[i].pos(0), data->rigids[i].pos(1), data->rigids[i].pos(2))
+		        		Ubitrack::Math::Quaternion((double)data->rigids[i].rot(0), (double)data->rigids[i].rot(1), (double)data->rigids[i].rot(2), (double)data->rigids[i].rot(3)),
+		        		Ubitrack::Math::Vector < 3 >((double)data->rigids[i].pos(0), (double)data->rigids[i].pos(1), (double)data->rigids[i].pos(2))
 	        		)
 		        );
 
 		        //send it to the component
-				LOG4CPP_TRACE( logger, "Sending pose for id " << id << " using " << getComponent( key )->getName() << ": " << pose );
-		        getComponent( key )->send( pose );
+				LOG4CPP_DEBUG( logger, "Sending pose for id " << id << " using " << getComponent( key )->getName() << ": " << pose << " mean error: " << data->rigids[i].meanError );
+				static_cast<NatNetRigidBodyReceiverComponent*>(getComponent( key ).get())->send( pose );
 		    }
 			else {
 				LOG4CPP_TRACE( logger, "No component for body id " << id );
@@ -945,14 +1028,14 @@ void NatNetModule::processFrame(const FrameData* data)
 		    	// possible without copying ??
 		    	boost::shared_ptr< std::vector< Ubitrack::Math::Vector < 3 > > > cloud(new std::vector< Ubitrack::Math::Vector < 3 > >(data->pointClouds[i].nMarkers));
 		    	for (int i=0; i < data->pointClouds[i].nMarkers; i++) {
-		    		cloud->at(i) = Ubitrack::Math::Vector < 3 >(data->pointClouds[i].markersPos[i](0), data->pointClouds[i].markersPos[i](1), data->pointClouds[i].markersPos[i](2));
+		    		cloud->at(i) = Ubitrack::Math::Vector < 3 >((double)data->pointClouds[i].markersPos[i](0), (double)data->pointClouds[i].markersPos[i](1), (double)data->pointClouds[i].markersPos[i](2));
 		    	}
 
 				Ubitrack::Measurement::PositionList pc( timestamp, cloud );
 
 		        //send it to the component
-				LOG4CPP_TRACE( logger, "Sending pose for id " << id << " using " << getComponent( key )->getName() << ": " << cloud );
-		        getComponent( key )->send( cloud );
+				LOG4CPP_DEBUG( logger, "Sending pose for id " << id << " using " << getComponent( key )->getName() << ": " << cloud );
+				static_cast<NatNetPointCloudReceiverComponent*>(getComponent( key ).get())->send( pc );
 		    }
 			else {
 				LOG4CPP_TRACE( logger, "No component for cloud name " << data->pointClouds[i].name );

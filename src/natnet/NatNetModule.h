@@ -296,7 +296,7 @@ public:
 
 	template< class EventType >
 	void send( const EventType& rEvent ) {
-
+		UBITRACK_THROW("Not Implemented.");
 	};
 
 
@@ -382,7 +382,7 @@ struct PointCloudData
 {
     const char* name;
     int nMarkers;
-    const Ubitrack::Math::Vector < 3, float >* markersPos;
+    std::vector< Ubitrack::Math::Vector < 3, float > > markersPos;
 };
 
 struct RigidData
@@ -391,10 +391,17 @@ struct RigidData
     Ubitrack::Math::Vector < 3, float > pos;
     Ubitrack::Math::Vector< 4, float> rot;
     int nMarkers;
-    const Ubitrack::Math::Vector < 3, float >* markersPos;
+    std::vector< Ubitrack::Math::Vector < 3, float > > markersPos;
     const int* markersID; // optional (2.0+)
     const float* markersSize; // optional (2.0+)
     float meanError; // optional (2.0+)
+};
+
+struct MarkerData
+{
+    int ID;
+    Ubitrack::Math::Vector < 3, float > pos;
+    const float* markersSize; // optional (2.0+)
 };
 
 struct SkeletonData
@@ -415,9 +422,19 @@ struct FrameData
     SkeletonData* skeletons;
 
     float latency;
+    unsigned int timecode;
+    unsigned int timecodeSub;
+    int eod;
+
     // unidentified markers
     int nOtherMarkers;
-    const Ubitrack::Math::Vector < 3, float >* otherMarkersPos;
+    std::vector< Ubitrack::Math::Vector < 3, float > > otherMarkersPos;
+
+
+    // labeled markers
+    int nLabeledMarkers;
+    MarkerData* labeledMarkersPos;
+
 };
 
 
