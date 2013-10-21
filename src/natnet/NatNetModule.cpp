@@ -976,16 +976,11 @@ void NatNetModule::processFrame(const FrameData* data)
 		    // check for non-recognized markers (all sub-markers are at (0,0,0))
 		    bool is_recognized = true;
 		    if (data->rigids[i].nMarkers > 0) {
-		    	LOG4CPP_DEBUG( logger , "DBG1  " << data->rigids[i].markersPos[0]);
 			    if ((data->rigids[i].markersPos[0](0) == 0) &&
 			    		(data->rigids[i].markersPos[0](1) == 0) &&
 			    		(data->rigids[i].markersPos[0](1) == 0)) {
-			    	LOG4CPP_DEBUG( logger , "DBG3" );
 					for (int j=1; j < data->rigids[i].nMarkers; j++) {
-				    	LOG4CPP_DEBUG( logger , "DBG4" );
-						if ((data->rigids[i].markersPos[j-1](0) == data->rigids[i].markersPos[j](0)) &&
-							(data->rigids[i].markersPos[j-1](1) == data->rigids[i].markersPos[j](1)) &&
-							(data->rigids[i].markersPos[j-1](2) == data->rigids[i].markersPos[j](2))) {
+						if (data->rigids[i].markersPos[j-1] == data->rigids[i].markersPos[j]) {
 							is_recognized = false;
 						}
 					}
@@ -1027,8 +1022,8 @@ void NatNetModule::processFrame(const FrameData* data)
 
 		    	// possible without copying ??
 		    	boost::shared_ptr< std::vector< Ubitrack::Math::Vector < 3 > > > cloud(new std::vector< Ubitrack::Math::Vector < 3 > >(data->pointClouds[i].nMarkers));
-		    	for (int i=0; i < data->pointClouds[i].nMarkers; i++) {
-		    		cloud->at(i) = Ubitrack::Math::Vector < 3 >((double)data->pointClouds[i].markersPos[i](0), (double)data->pointClouds[i].markersPos[i](1), (double)data->pointClouds[i].markersPos[i](2));
+		    	for (int j=0; j < data->pointClouds[i].nMarkers; j++) {
+		    		cloud->at(j) = Ubitrack::Math::Vector < 3 >(data->pointClouds[i].markersPos[j]);
 		    	}
 
 				Ubitrack::Measurement::PositionList pc( timestamp, cloud );
