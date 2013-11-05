@@ -247,13 +247,23 @@ void NatNetModule::startModule()
         return;
     }
 
+#ifdef _WINDOWS
+	// on windows, one cannot bind a socket to a multicast address ..
+    data_socket->set_option(udp::socket::reuse_address(true));
+    if (data_socket->bind(client_endpoint, ec))
+    {
+    	LOG4CPP_ERROR( logger, ec.category().name() << " ERROR while binding data socket : " << ec.message() );
+        return;
+    }
+#else
+	// on Linux (others not tested) we need to bind to the multicast address to receive data
     data_socket->set_option(udp::socket::reuse_address(true));
     if (data_socket->bind(mc_endpoint, ec))
     {
     	LOG4CPP_ERROR( logger, ec.category().name() << " ERROR while binding data socket : " << ec.message() );
         return;
     }
-
+#endif
     // Join the multicast group.
     if (!(m_clientName == ""))
         data_socket->set_option(boost::asio::ip::multicast::join_group(boost::asio::ip::address::from_string(MULTICAST_ADDRESS).to_v4(), client_endpoint.address().to_v4()));
