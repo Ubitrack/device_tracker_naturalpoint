@@ -975,6 +975,9 @@ void NatNetModule::processFrame(const FrameData* data)
 		// substract from timestamp .. instead of constant.
 		//timestamp -= 19000000;
 
+		// for now assume 4 milli seconds
+		timestamp -= 4000000;
+
 		for (int i=0; i<data->nRigids; ++i) {
 
 			int id = bodyIdMap[data->rigids[i].ID];
