@@ -219,17 +219,17 @@ public:
     void HandleReceive (const boost::system::error_code err, size_t length);
 
 protected:
-    //boost::shared_ptr< UdpSocketSingleton > m_pSocket;
-
-    // Recive data. Do not touch from outside of async network thread
-    //enum { max_receive_length = 10240, receive_buffer_size = 10242 };
-    //char receive_data[receive_buffer_size];
-	//boost::asio::ip::udp::endpoint sender_endpoint;
 
 	Measurement::TimestampSync m_synchronizer;
 
-protected:
 
+	/** measurments received */
+	std::size_t m_counter;
+
+	/** Timestamp of the last received measurement */
+	Ubitrack::Measurement::Timestamp m_lastTimestamp;
+
+	/** create the components **/
 	boost::shared_ptr< ComponentClass > createComponent( const std::string&, const std::string& name, boost::shared_ptr< Graph::UTQLSubgraph> subgraph,
 				const ComponentKey& key, ModuleClass* pModule );
 

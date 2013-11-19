@@ -168,6 +168,8 @@ NatNetModule::NatNetModule( const NatNetModuleKey& moduleKey, boost::shared_ptr<
     , modelInfoReceived(false)
     , m_serverName(m_moduleKey.get())
     , m_clientName("")
+    , m_counter(0)
+    , m_lastTimestamp(0)
 {
 
 	Graph::UTQLSubgraph::NodePtr config;
@@ -177,7 +179,7 @@ NatNetModule::NatNetModule( const NatNetModuleKey& moduleKey, boost::shared_ptr<
 
 	if ( !config )
 	{
-	  UBITRACK_THROW( "NatNetTracker Pattern has no \"Output\" edge");
+	  UBITRACK_THROW( "NatNetTracker Pattern has no \"OptiTrack\" node");
 	}
 
 	m_clientName = config->getAttributeString( "clientName" );
@@ -195,6 +197,8 @@ NatNetComponent::~NatNetComponent()
 // see also http://www.boost.org/doc/libs/1_44_0/doc/html/boost_asio/overview/core/threads.html)
 void NatNetModule::startModule()
 {
+
+
 	LOG4CPP_INFO( logger, "Creating NatNet for server: " << m_moduleKey.get() );
 
     if (command_socket) delete command_socket; command_socket = NULL;
@@ -952,9 +956,13 @@ void NatNetModule::processFrame(const FrameData* data)
 	// .. but would not matter too much if time-delay estimation is in place
 	Ubitrack::Measurement::Timestamp timestamp = Ubitrack::Measurement::now();
 
+	m_lastTimestamp = timestamp;
+	++m_counter;
+
+
 	// use synchronizer to correct timestamps
 	// XXX is this correct ??
-	//timestamp = m_synchronizer.convertNativeToLocal( data->frameNumber, timestamp );
+	timestamp = m_synchronizer.convertNativeToLocal( m_counter, timestamp );
 
 	if ( m_running )
 	{
@@ -1049,7 +1057,7 @@ void NatNetModule::processModelDef(const ModelDef* data)
 	bodyIdMap.clear();
 	pointcloudNameIdMap.clear();
 
-    NatNetModule::ComponentList components = this->getAllComponents();
+//    NatNetModule::ComponentList components = this->getAllComponents();
     int index = 0;
 	ComponentList allComponents( getAllComponents() );
 	std::map<std::string, int> bodyNameIdMap;
