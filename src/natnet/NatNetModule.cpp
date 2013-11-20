@@ -979,14 +979,11 @@ void NatNetModule::processFrame(const FrameData* data)
 		// XXX What's the default delay with NatNet .. needs to be measured..
 		// subtract the approximate processing time of the cameras and DTrack (19ms)
 		// (daniel) better synchronize the DTrack controller to a common NTP server and use "ts" fields directly.
-		//          This should work well at least with NatNettrack2/3 cameras (not necessarily NatNettrack/TP)
+		//          This should work well at least with ARTtrack2/3 cameras (not necessarily ARTtrack/TP)
 
 		LOG4CPP_DEBUG( logger , "NatNet Latency: " << data->latency );
-		// substract from timestamp .. instead of constant.
-		//timestamp -= 19000000;
-
-		// for now assume 4 milli seconds
-		timestamp -= 4000000;
+		// should substract latency + network from timestamp .. instead of constant.
+		timestamp -= 19000000;
 
 		for (int i=0; i<data->nRigids; ++i) {
 
