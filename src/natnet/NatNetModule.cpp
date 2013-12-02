@@ -618,12 +618,12 @@ static void memread(Ubitrack::Math::Vector< 3, float >& dest, const unsigned cha
 
 	if (ptr + sizeof(float)*3 <= end)
     {
-        dest = Ubitrack::Math::Vector3(((const float*)ptr)[0], ((const float*)ptr)[1], ((const float*)ptr)[2]);
+        dest = Ubitrack::Math::Vector3d(((const float*)ptr)[0], ((const float*)ptr)[1], ((const float*)ptr)[2]);
         ptr += sizeof(float)*3;
     }
     else
     {
-        dest = Ubitrack::Math::Vector3(0,0,0);
+        dest = Ubitrack::Math::Vector3d(0,0,0);
         if (ptr != end)
         {
         	std::stringstream msg;
@@ -642,12 +642,12 @@ static void memread(Ubitrack::Math::Vector< 4, float >& dest, const unsigned cha
 
 	if (ptr + sizeof(float)*4 <= end)
     {
-        dest = Ubitrack::Math::Vector4(((const float*)ptr)[0], ((const float*)ptr)[1], ((const float*)ptr)[2], ((const float*)ptr)[3]);
+        dest = Ubitrack::Math::Vector4d(((const float*)ptr)[0], ((const float*)ptr)[1], ((const float*)ptr)[2], ((const float*)ptr)[3]);
         ptr += sizeof(float)*4;
     }
     else
     {
-        dest = Ubitrack::Math::Vector4(0,0,0,1);
+        dest = Ubitrack::Math::Vector4d(0,0,0,1);
         if (ptr != end)
         {
         	std::stringstream msg;
