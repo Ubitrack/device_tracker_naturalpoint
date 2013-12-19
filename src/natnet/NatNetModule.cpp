@@ -360,7 +360,7 @@ void NatNetModule::handle_command_receive(const boost::system::error_code& ec, s
 {
     if (ec)
     {
-        LOG4CPP_ERROR( logger, ec.category().name() << " ERROR while receiving command from " << recv_command_endpoint );
+		LOG4CPP_ERROR( logger, ec.category().name() << " ERROR while receiving command from " << recv_command_endpoint << ": " << ec.message());
     }
     else
     {
@@ -1124,7 +1124,7 @@ void NatNetModule::processModelDef(const ModelDef* data)
     for (int i=0; i<data->nPointClouds; ++i) {
         if (data->pointClouds[i].name)
         {
-        	if (pointcloudNameIdMap.count(data->rigids[i].name) > 0) {
+        	if (pointcloudNameIdMap.count(data->pointClouds[i].name) > 0) {
         		LOG4CPP_INFO( logger, "Receiver connected for Pointcloud: " << data->pointClouds[i].name );
         	} else {
         		LOG4CPP_WARN( logger, "Received PointCloudDef: " << data->pointClouds[i].name << " but receiver component was not found." );
