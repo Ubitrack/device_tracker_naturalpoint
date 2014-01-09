@@ -357,7 +357,7 @@ struct RigidDef
     const char* name;
     int ID;
     int parentID;
-    Ubitrack::Math::Vector < 3, float > offset;
+    Ubitrack::Math::Vector< float, 3 > offset;
 };
 
 struct SkeletonDef
@@ -382,16 +382,16 @@ struct PointCloudData
 {
     const char* name;
     int nMarkers;
-    std::vector< Ubitrack::Math::Vector < 3, float > > markersPos;
+    std::vector< Ubitrack::Math::Vector< float, 3 > > markersPos;
 };
 
 struct RigidData
 {
     int ID;
-    Ubitrack::Math::Vector < 3, float > pos;
-    Ubitrack::Math::Vector< 4, float> rot;
+    Ubitrack::Math::Vector< float, 3 > pos;
+    Ubitrack::Math::Vector< float, 4 > rot;
     int nMarkers;
-    std::vector< Ubitrack::Math::Vector < 3, float > > markersPos;
+    std::vector< Ubitrack::Math::Vector< float, 3 > > markersPos;
     const int* markersID; // optional (2.0+)
     const float* markersSize; // optional (2.0+)
     float meanError; // optional (2.0+)
@@ -400,7 +400,7 @@ struct RigidData
 struct MarkerData
 {
     int ID;
-    Ubitrack::Math::Vector < 3, float > pos;
+    Ubitrack::Math::Vector< float, 3 > pos;
     const float* markersSize; // optional (2.0+)
 };
 
@@ -428,7 +428,7 @@ struct FrameData
 
     // unidentified markers
     int nOtherMarkers;
-    std::vector< Ubitrack::Math::Vector < 3, float > > otherMarkersPos;
+    std::vector< Ubitrack::Math::Vector< float, 3 > > otherMarkersPos;
 
 
     // labeled markers

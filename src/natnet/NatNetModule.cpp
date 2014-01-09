@@ -611,7 +611,7 @@ static void memread(const T*& dest, int n, const unsigned char*& ptr, const unsi
     }
 }
 
-static void memread(Ubitrack::Math::Vector< 3, float >& dest, const unsigned char*& ptr, const unsigned char*& end, const char* fieldName=NULL)
+static void memread(Ubitrack::Math::Vector< float, 3 >& dest, const unsigned char*& ptr, const unsigned char*& end, const char* fieldName=NULL)
 {
 	if (fieldName)
 	    	LOG4CPP_TRACE( logger, "memread vec3 " << fieldName << " size " << sizeof(float)*3);
@@ -635,7 +635,7 @@ static void memread(Ubitrack::Math::Vector< 3, float >& dest, const unsigned cha
     }
 }
 
-static void memread(Ubitrack::Math::Vector< 4, float >& dest, const unsigned char*& ptr, const unsigned char*& end, const char* fieldName=NULL)
+static void memread(Ubitrack::Math::Vector< float, 4 >& dest, const unsigned char*& ptr, const unsigned char*& end, const char* fieldName=NULL)
 {
 	if (fieldName)
 	    	LOG4CPP_TRACE( logger, "memread vec4 " << fieldName << " size " << sizeof(float)*4);
@@ -659,7 +659,7 @@ static void memread(Ubitrack::Math::Vector< 4, float >& dest, const unsigned cha
     }
 }
 
-static void memread(std::vector< Ubitrack::Math::Vector< 3, float > >& dest, int n, const unsigned char*& ptr, const unsigned char*& end, const char* fieldName=NULL)
+static void memread(std::vector< Ubitrack::Math::Vector< float, 3 > >& dest, int n, const unsigned char*& ptr, const unsigned char*& end, const char* fieldName=NULL)
 {
 	if (fieldName)
 	    	LOG4CPP_TRACE( logger, "memread vec3* " << fieldName << " elements " << n << " size " << sizeof(float)*3);
@@ -669,7 +669,7 @@ static void memread(std::vector< Ubitrack::Math::Vector< 3, float > >& dest, int
     {
     	dest.resize(n);
     	for (int i=0; i < n; i++) {
-    		dest.at(i) = Ubitrack::Math::Vector< 3, float >(((const float*)ptr)[0],((const float*)ptr)[1],((const float*)ptr)[2]);
+    		dest.at(i) = Ubitrack::Math::Vector< float, 3 >(((const float*)ptr)[0],((const float*)ptr)[1],((const float*)ptr)[2]);
             ptr += sizeof(float)*3;
     	}
     }
@@ -1016,7 +1016,7 @@ void NatNetModule::processFrame(const FrameData* data)
 		        Ubitrack::Measurement::Pose pose( timestamp,
 		        	Ubitrack::Math::Pose(
 		        		Ubitrack::Math::Quaternion((double)data->rigids[i].rot(0), (double)data->rigids[i].rot(1), (double)data->rigids[i].rot(2), (double)data->rigids[i].rot(3)),
-		        		Ubitrack::Math::Vector < 3 >((double)data->rigids[i].pos(0), (double)data->rigids[i].pos(1), (double)data->rigids[i].pos(2))
+		        		Ubitrack::Math::Vector< double, 3 >((double)data->rigids[i].pos(0), (double)data->rigids[i].pos(1), (double)data->rigids[i].pos(2))
 	        		)
 		        );
 
@@ -1039,9 +1039,9 @@ void NatNetModule::processFrame(const FrameData* data)
 		    {
 
 		    	// possible without copying ??
-		    	boost::shared_ptr< std::vector< Ubitrack::Math::Vector < 3 > > > cloud(new std::vector< Ubitrack::Math::Vector < 3 > >(data->pointClouds[i].nMarkers));
+		    	boost::shared_ptr< std::vector< Ubitrack::Math::Vector< double, 3 > > > cloud(new std::vector< Ubitrack::Math::Vector< double, 3 > >(data->pointClouds[i].nMarkers));
 		    	for (int j=0; j < data->pointClouds[i].nMarkers; j++) {
-		    		cloud->at(j) = Ubitrack::Math::Vector < 3 >(data->pointClouds[i].markersPos[j]);
+		    		cloud->at(j) = Ubitrack::Math::Vector< double, 3 >(data->pointClouds[i].markersPos[j]);
 		    	}
 
 				Ubitrack::Measurement::PositionList pc( timestamp, cloud );
