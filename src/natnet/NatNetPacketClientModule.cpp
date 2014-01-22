@@ -22,7 +22,7 @@
  */
 
 
-#include "NatNetModule.h"
+#include "NatNetPacketClientModule.h"
 #include <iostream>
 #include <sstream>
 #include <algorithm>
