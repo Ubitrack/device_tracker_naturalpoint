@@ -13,6 +13,7 @@
                 <Description><p xmlns="http://www.w3.org/1999/xhtml">OptiTrack Tracker</p></Description>
                 <Attribute name="serverName" default="natnet.local" displayName="Server Name/IP" value="natnet.local" xsi:type="StringAttributeDeclarationType"/>
                 <Attribute name="clientName" displayName="Client Name/IP" xsi:type="StringAttributeDeclarationType"/>
+                <Attribute name="timestampOffset" default="-12000000" displayName="Timestamp Offset" xsi:type="IntAttributeDeclarationType"/>
             </Node>
             <Node name="Body" displayName="OptiTrack Marker">
                 <Description><p xmlns="http://www.w3.org/1999/xhtml">OptiTrack Tracker</p></Description>
@@ -43,6 +44,7 @@
                 <Description><p xmlns="http://www.w3.org/1999/xhtml">OptiTrack Tracker</p></Description>
                 <Attribute name="serverName" default="natnet.local" displayName="Server Name/IP" value="natnet.local" xsi:type="StringAttributeDeclarationType"/>
                 <Attribute name="clientName" displayName="Client Name/IP" xsi:type="StringAttributeDeclarationType"/>
+                <Attribute name="timestampOffset" default="-12000000" displayName="Timestamp Offset" xsi:type="IntAttributeDeclarationType"/>
             </Node>
             <Node name="PointCloud" displayName="OptiTrack PointCloud">
                 <Description><p xmlns="http://www.w3.org/1999/xhtml">OptiTrack Tracker</p></Description>
