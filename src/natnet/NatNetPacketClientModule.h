@@ -278,7 +278,7 @@ private:
 
     std::string m_serverName;
     std::string m_clientName;
-	int m_timestampOffset;
+	int m_latency;
 };
 
 

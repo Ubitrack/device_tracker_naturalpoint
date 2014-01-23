@@ -43,10 +43,9 @@
 #include <string>
 #include <cstdlib>
 
-
-// on windows, asio must be included before anything that possible includes windows.h
-// don't ask why.
-#include <boost/asio.hpp>
+#include <winsock2.h>
+#include "NatNetTypes.h"
+#include "NatNetClient.h"
 
 #include <iostream>
 #include <map>
@@ -54,8 +53,6 @@
 #include <boost/utility.hpp>
 #include <boost/shared_ptr.hpp>
 #include <boost/function.hpp>
-#include <boost/bind.hpp>
-#include <boost/thread.hpp>
 
 #include <utDataflow/PushSupplier.h>
 #include <utDataflow/Component.h>
@@ -64,19 +61,6 @@
 #include <utMeasurement/TimestampSync.h>
 
 namespace Ubitrack { namespace Drivers {
-
-
-/// internal message buffer class, as defined in NatNet SDK
-struct sPacket;
-
-/// decoded definition of tracked objects
-struct ModelDef;
-
-/// decoded frame of tracked data
-struct FrameData;
-
-
-
 using namespace Dataflow;
 
 // forward declaration
@@ -215,16 +199,11 @@ public:
 
 	virtual void stopModule();
 
-	/** thread method */
-    void HandleReceive (const boost::system::error_code err, size_t length);
+    void processFrame(sFrameOfMocapData* data);
 
 protected:
 
 	Measurement::TimestampSync m_synchronizer;
-
-
-	/** measurments received */
-	std::size_t m_counter;
 
 	/** Timestamp of the last received measurement */
 	Ubitrack::Measurement::Timestamp m_lastTimestamp;
@@ -234,51 +213,22 @@ protected:
 				const ComponentKey& key, ModuleClass* pModule );
 
 
+
 private:
 
-	boost::asio::ip::udp::endpoint server_endpoint;
-    boost::asio::ip::udp::socket* command_socket;
-    boost::asio::ip::udp::socket* data_socket;
-
-	/** thread running the IO service */
-	boost::shared_ptr< boost::thread > m_pNetworkThread;
-
-    sPacket* recv_command_packet;
-    boost::asio::ip::udp::endpoint recv_command_endpoint;
-
-    sPacket* recv_data_packet;
-    boost::asio::ip::udp::endpoint recv_data_endpoint;
-
-    void start_command_receive();
-    void handle_command_receive(const boost::system::error_code& error,
-            std::size_t bytes_transferred);
-
-    void start_data_receive();
-    void handle_data_receive(const boost::system::error_code& error,
-            std::size_t bytes_transferred);
-
-    void decodeFrame(const sPacket& data);
-    void decodeModelDef(const sPacket& data);
-
-    virtual void processFrame(const FrameData* data);
-    virtual void processModelDef(const ModelDef* data);
-
-    std::string serverString;
-    unsigned char serverVersion[4]; // sending app's version [major.minor.build.revision]
-    unsigned char natNetVersion[4]; // sending app's NatNet version [major.minor.build.revision]
+	int CreateClient(int iConnectionType);
+	NatNetClient* theClient;
 
     std::map<int, int> bodyIdMap;
+	std::map<std::string, int> bodyNameIdMap;
     std::map<std::string, int> pointcloudNameIdMap;
 
     bool serverInfoReceived;
     bool modelInfoReceived;
 
-    static boost::asio::io_service ios;
-    static boost::asio::ip::udp::resolver& get_resolver();
-
     std::string m_serverName;
     std::string m_clientName;
-	int m_timestampOffset;
+	int m_latency;
 };
 
 
@@ -338,104 +288,6 @@ public:
 protected:
 	// the port is the only member
 	PushSupplier< Ubitrack::Measurement::PositionList > m_port;
-};
-
-
-
-struct PointCloudDef
-{
-    const char* name;
-    int nMarkers;
-    struct Marker
-    {
-        const char* name;
-    };
-    Marker* markers;
-};
-
-struct RigidDef
-{
-    const char* name;
-    int ID;
-    int parentID;
-    Ubitrack::Math::Vector< float, 3 > offset;
-};
-
-struct SkeletonDef
-{
-    const char* name;
-    int ID;
-    int nRigids;
-    RigidDef* rigids;
-};
-
-struct ModelDef
-{
-    int nPointClouds;
-    PointCloudDef* pointClouds;
-    int nRigids;
-    RigidDef* rigids;
-    int nSkeletons;
-    SkeletonDef* skeletons;
-};
-
-struct PointCloudData
-{
-    const char* name;
-    int nMarkers;
-    std::vector< Ubitrack::Math::Vector< float, 3 > > markersPos;
-};
-
-struct RigidData
-{
-    int ID;
-    Ubitrack::Math::Vector< float, 3 > pos;
-    Ubitrack::Math::Vector< float, 4 > rot;
-    int nMarkers;
-    std::vector< Ubitrack::Math::Vector< float, 3 > > markersPos;
-    const int* markersID; // optional (2.0+)
-    const float* markersSize; // optional (2.0+)
-    float meanError; // optional (2.0+)
-};
-
-struct MarkerData
-{
-    int ID;
-    Ubitrack::Math::Vector< float, 3 > pos;
-    const float* markersSize; // optional (2.0+)
-};
-
-struct SkeletonData
-{
-    int ID;
-    int nRigids;
-    RigidData* rigids;
-};
-
-struct FrameData
-{
-    int frameNumber;
-    int nPointClouds;
-    PointCloudData* pointClouds;
-    int nRigids;
-    RigidData* rigids;
-    int nSkeletons;
-    SkeletonData* skeletons;
-
-    float latency;
-    unsigned int timecode;
-    unsigned int timecodeSub;
-    int eod;
-
-    // unidentified markers
-    int nOtherMarkers;
-    std::vector< Ubitrack::Math::Vector< float, 3 > > otherMarkersPos;
-
-
-    // labeled markers
-    int nLabeledMarkers;
-    MarkerData* labeledMarkersPos;
-
 };
 
 

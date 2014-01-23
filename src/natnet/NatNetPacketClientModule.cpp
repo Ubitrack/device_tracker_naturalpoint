@@ -168,7 +168,7 @@ NatNetModule::NatNetModule( const NatNetModuleKey& moduleKey, boost::shared_ptr<
     , modelInfoReceived(false)
     , m_serverName(m_moduleKey.get())
     , m_clientName("")
-	, m_timestampOffset(-12000000) // estimated 12 ms
+	, m_latency(12000000) // estimated 12 ms
     , m_counter(0)
     , m_lastTimestamp(0)
 {
@@ -184,7 +184,7 @@ NatNetModule::NatNetModule( const NatNetModuleKey& moduleKey, boost::shared_ptr<
 	}
 
 	m_clientName = config->getAttributeString( "clientName" );
-	config->getAttributeData("timestampOffset", m_timestampOffset);
+	config->getAttributeData("latency", m_latency);
 
 }
 
@@ -985,8 +985,8 @@ void NatNetModule::processFrame(const FrameData* data)
 
 		LOG4CPP_DEBUG( logger , "NatNet Latency: " << data->latency );
 		// should substract latency + network from timestamp .. instead of constant.
-		// was -19,000,000
-		timestamp = m_timestampOffset;
+		// was 19,000,000
+		timestamp -= m_latency;
 
 		for (int i=0; i<data->nRigids; ++i) {
 
