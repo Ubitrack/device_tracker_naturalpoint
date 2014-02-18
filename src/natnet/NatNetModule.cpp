@@ -31,7 +31,7 @@
 #include <utMath/Quaternion.h>
 #include <utMath/Pose.h>
 #include <utMath/Matrix.h>
-
+#include <utUtil/OS.h>
 #include <boost/array.hpp>
 
 #include <log4cpp/Category.hh>
@@ -307,6 +307,7 @@ void NatNetModule::stopModule()
 	if (theClient) {
 		LOG4CPP_INFO( logger, "Uninitialize NatNetClient on port " << m_moduleKey.get() );
 		theClient->Uninitialize();
+		Util::sleep(50); // wait 50ms after uninitialize ..
 		delete theClient;
 		theClient = NULL;
 	}
@@ -317,8 +318,11 @@ NatNetModule::~NatNetModule()
 {
 	// delete references
 	if (theClient) {
-		delete theClient;	
-		theClient = NULL;
+		stopModule();
+		if (theClient) {
+			delete theClient;	
+			theClient = NULL;
+		}
 	}
 
 }
