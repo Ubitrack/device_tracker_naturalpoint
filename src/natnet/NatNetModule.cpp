@@ -465,7 +465,12 @@ NatNetComponent::~NatNetComponent()
 	LOG4CPP_INFO( logger, "Destroying NatNet component" );
 }
 
-
+std::ostream& operator<<( std::ostream& s, const NatNetComponentKey& k )
+{
+        s << "NatNetComponent[ " << k.getBody() << " "
+                             << k.getTargetType() << " ]";
+        return s;
+}
 
 
 // register module at factory

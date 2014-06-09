@@ -1165,7 +1165,12 @@ boost::shared_ptr< NatNetModule::ComponentClass > NatNetModule::createComponent(
 
 }
 
-
+std::ostream& operator<<( std::ostream& s, const NatNetComponentKey& k )
+{
+        s << "NatNetComponent[ " << k.getBody() << " "
+                             << k.getTargetType() << " ]";
+        return s;
+}
 
 // register module at factory
 UBITRACK_REGISTER_COMPONENT( ComponentFactory* const cf ) {

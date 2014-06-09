@@ -231,6 +231,7 @@ private:
 	int m_latency;
 };
 
+std::ostream& operator<<( std::ostream& s, const NatNetComponentKey& k );
 
 /**
  * Component for NatNet tracker.
