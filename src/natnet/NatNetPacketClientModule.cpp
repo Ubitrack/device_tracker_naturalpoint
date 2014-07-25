@@ -168,7 +168,7 @@ NatNetModule::NatNetModule( const NatNetModuleKey& moduleKey, boost::shared_ptr<
     , modelInfoReceived(false)
     , m_serverName(m_moduleKey.get())
     , m_clientName("")
-	, m_latency(12000000) // estimated 12 ms
+	, m_defaultLatency(10000000)
     , m_counter(0)
     , m_lastTimestamp(0)
 {
@@ -983,10 +983,12 @@ void NatNetModule::processFrame(const FrameData* data)
 		// (daniel) better synchronize the DTrack controller to a common NTP server and use "ts" fields directly.
 		//          This should work well at least with ARTtrack2/3 cameras (not necessarily ARTtrack/TP)
 
+		/* latency is now managed in the components, since modules cannot have ports
 		LOG4CPP_DEBUG( logger , "NatNet Latency: " << data->latency );
 		// should substract latency + network from timestamp .. instead of constant.
 		// was 19,000,000
 		timestamp -= m_latency;
+		*/
 
 		for (int i=0; i<data->nRigids; ++i) {
 
@@ -1164,6 +1166,15 @@ boost::shared_ptr< NatNetModule::ComponentClass > NatNetModule::createComponent(
 	}
 
 }
+
+void NatNetComponent::receiveLatency( const Measurement::Distance& m ) {
+		double l = *m;
+		LOG4CPP_DEBUG( logger , "NatNetComponent received new latency measurement in ms: " << l );
+		// convert ms to timestamp offset
+		m_latency = (long int)(1000000.0 * l);
+};
+
+
 
 std::ostream& operator<<( std::ostream& s, const NatNetComponentKey& k )
 {

@@ -58,6 +58,7 @@
 #include <boost/thread.hpp>
 
 #include <utDataflow/PushSupplier.h>
+#include <utDataflow/PushConsumer.h>
 #include <utDataflow/Component.h>
 #include <utDataflow/Module.h>
 #include <utMeasurement/Measurement.h>
@@ -218,6 +219,10 @@ public:
 	/** thread method */
     void HandleReceive (const boost::system::error_code err, size_t length);
 
+	inline long int getDefaultLatency() {
+		return m_defaultLatency;
+	}
+	
 protected:
 
 	Measurement::TimestampSync m_synchronizer;
@@ -278,7 +283,8 @@ private:
 
     std::string m_serverName;
     std::string m_clientName;
-	int m_latency;
+
+	long int m_defaultLatency;
 };
 
 std::ostream& operator<<( std::ostream& s, const NatNetComponentKey& k );
@@ -294,6 +300,8 @@ public:
 	/** constructor */
 	NatNetComponent( const std::string& name, boost::shared_ptr< Graph::UTQLSubgraph > subgraph, const NatNetComponentKey& componentKey, NatNetModule* pModule )
 		: NatNetModule::Component( name, componentKey, pModule )
+		, m_latencyPort("Latency", *this, boost::bind( &NatNetComponent::receiveLatency, this, _1 ) )
+		, m_latency(pModule->getDefaultLatency())
 	{}
 
 	template< class EventType >
@@ -301,6 +309,7 @@ public:
 		UBITRACK_THROW("Not Implemented.");
 	};
 
+	void receiveLatency( const Measurement::Distance& m );
 
 	/** destructor */
 	~NatNetComponent();
@@ -316,7 +325,7 @@ public:
 	{}
 	
 	inline void send( const Ubitrack::Measurement::Pose& rEvent ) {
-		m_port.send(rEvent);
+		m_port.send(Ubitrack::Measurement::Pose(rEvent.time() -  m_latency, rEvent));
 	}
 
 protected:
@@ -333,7 +342,7 @@ public:
 	{}
 
 	inline void send( const Ubitrack::Measurement::PositionList& rEvent ) {
-		m_port.send(rEvent);
+		m_port.send(Ubitrack::Measurement::PositionList(rEvent.time() -  m_latency, rEvent));
 	}
 
 protected:
