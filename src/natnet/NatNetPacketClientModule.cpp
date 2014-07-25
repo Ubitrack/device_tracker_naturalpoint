@@ -184,7 +184,7 @@ NatNetModule::NatNetModule( const NatNetModuleKey& moduleKey, boost::shared_ptr<
 	}
 
 	m_clientName = config->getAttributeString( "clientName" );
-	config->getAttributeData("latency", m_latency);
+	config->getAttributeData("latency", m_defaultLatency);
 
 }
 
