@@ -313,6 +313,11 @@ public:
 
 	/** destructor */
 	~NatNetComponent();
+	
+protected:
+	PushConsumer< Ubitrack::Measurement::Distance > m_latencyPort;
+	long int m_latency;
+
 
 };
 
