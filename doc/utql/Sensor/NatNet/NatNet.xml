@@ -44,7 +44,7 @@
                 <Description><p xmlns="http://www.w3.org/1999/xhtml">OptiTrack Tracker</p></Description>
                 <Attribute name="serverName" default="natnet.local" displayName="Server Name/IP" value="natnet.local" xsi:type="StringAttributeDeclarationType"/>
                 <Attribute name="clientName" displayName="Client Name/IP" xsi:type="StringAttributeDeclarationType"/>
-                <Attribute name="timestampOffset" default="-12000000" displayName="Timestamp Offset" xsi:type="IntAttributeDeclarationType"/>
+                <Attribute name="latency" default="10000000" displayName="Latency" xsi:type="IntAttributeDeclarationType"/>
             </Node>
             <Node name="PointCloud" displayName="OptiTrack PointCloud">
                 <Description><p xmlns="http://www.w3.org/1999/xhtml">OptiTrack Tracker</p></Description>
@@ -66,6 +66,86 @@
             <Attribute name="natnetType" default="3dcloud" constant="true" displayName="Target Type" xsi:type="StringAttributeDeclarationType"/>
         </DataflowConfiguration>
     </Pattern>
+
+	<Pattern name="NatNetPoseTrackerDelayCompensation" displayName="OptiTrack Tracker with TimeDelay compensation (Pose)">
+        <Description><p xmlns="http://www.w3.org/1999/xhtml">The OptiTrack tracker pattern with TimeDelay compensation</p></Description>
+		<Input>
+			<Node name="A" displayName="Sensor 1 (Reference)"/>
+			<Node name="B" displayName="Sensor 2 (Difference)"/>
+			
+			<Edge name="Latency" source="A" destination="B" displayName="Time difference [ms]">
+				<Description><h:p>The delay between the reference and this sensors' data measurements.</h:p></Description>
+                <Predicate>type=='Distance'&amp;&amp;mode=='push'</Predicate>
+			</Edge>
+		</Input>		
+        <Output>
+            <Node name="OptiTrack" displayName="OptiTrack Tracker">
+                <Description><p xmlns="http://www.w3.org/1999/xhtml">OptiTrack Tracker</p></Description>
+                <Attribute name="serverName" default="natnet.local" displayName="Server Name/IP" value="natnet.local" xsi:type="StringAttributeDeclarationType"/>
+                <Attribute name="clientName" displayName="Client Name/IP" xsi:type="StringAttributeDeclarationType"/>
+                <Attribute name="latency" default="10000000" displayName="Latency" xsi:type="IntAttributeDeclarationType"/>
+            </Node>
+            <Node name="Body" displayName="OptiTrack Marker">
+                <Description><p xmlns="http://www.w3.org/1999/xhtml">OptiTrack Tracker</p></Description>
+            </Node>
+            <Edge name="Output" displayName="Tracked Transformation" source="OptiTrack" destination="Body">
+                <Attribute name="type" value="6D" xsi:type="EnumAttributeReferenceType"/>
+                <Attribute name="mode" value="push" xsi:type="EnumAttributeReferenceType"/>
+                <Attribute name="natnetBodyName" default="Trackable1" displayName="OptiTrack body Name" value="Trackable1" xsi:type="StringAttributeDeclarationType">
+                    <Description><p xmlns="http://www.w3.org/1999/xhtml">Body Name used by OptiTrack (configured in TrackingTools software)</p></Description>
+                </Attribute>
+                <Attribute name="natnetBodyId" displayName="OptiTrack body ID" min="1" max="20" default="1" xsi:type="IntAttributeDeclarationType">
+                    <Description><p xmlns="http://www.w3.org/1999/xhtml">Body ID used by OptiTrack (configured in TrackingTools software)</p></Description>
+                </Attribute>
+
+            </Edge>
+        </Output>
+        <DataflowConfiguration>
+            <UbitrackLib class="NatNetTracker"/>
+
+            <Attribute name="natnetType" default="6d" constant="true" displayName="Target Type" xsi:type="StringAttributeDeclarationType"/>
+        </DataflowConfiguration>
+    </Pattern>
+
+    <Pattern name="NatNetPointCloudTrackerDelayCompensation" displayName="OptiTrack Tracker with TimeDelay compensation (PointCloud)">
+        <Description><p xmlns="http://www.w3.org/1999/xhtml">The OptiTrack pointcloud pattern with TimeDelay compensation</p></Description>
+		<Input>
+			<Node name="A" displayName="Sensor 1 (Reference)"/>
+			<Node name="B" displayName="Sensor 2 (Difference)"/>
+			
+			<Edge name="Latency" source="A" destination="B" displayName="Time difference [ms]">
+				<Description><h:p>The delay between the reference and this sensors' data measurements.</h:p></Description>
+                <Predicate>type=='Distance'&amp;&amp;mode=='push'</Predicate>
+			</Edge>
+		</Input>		
+        <Output>
+            <Node name="OptiTrack" displayName="OptiTrack Tracker">
+                <Description><p xmlns="http://www.w3.org/1999/xhtml">OptiTrack Tracker</p></Description>
+                <Attribute name="serverName" default="natnet.local" displayName="Server Name/IP" value="natnet.local" xsi:type="StringAttributeDeclarationType"/>
+                <Attribute name="clientName" displayName="Client Name/IP" xsi:type="StringAttributeDeclarationType"/>
+                <Attribute name="latency" default="10000000" displayName="Latency" xsi:type="IntAttributeDeclarationType"/>
+            </Node>
+            <Node name="PointCloud" displayName="OptiTrack PointCloud">
+                <Description><p xmlns="http://www.w3.org/1999/xhtml">OptiTrack Tracker</p></Description>
+            </Node>
+            <Edge name="Output" displayName="Tracked Transformation" source="OptiTrack" destination="PointCloud">
+                <Attribute name="type" value="3DPositionList" xsi:type="EnumAttributeReferenceType"/>
+                <Attribute name="mode" value="push" xsi:type="EnumAttributeReferenceType"/>
+                <Attribute name="natnetBodyName" displayName="OptiTrack body Name" value="Trackable1" xsi:type="StringAttributeDeclarationType">
+                    <Description><p xmlns="http://www.w3.org/1999/xhtml">Body Name used by OptiTrack (configured in TrackingTools software)</p></Description>
+                </Attribute>
+                <Attribute name="natnetBodyId" displayName="OptiTrack body ID" min="1" max="20" default="1" xsi:type="IntAttributeDeclarationType">
+                    <Description><p xmlns="http://www.w3.org/1999/xhtml">Body ID used by OptiTrack (configured in TrackingTools software)</p></Description>
+                </Attribute>
+
+            </Edge>
+        </Output>
+        <DataflowConfiguration>
+            <UbitrackLib class="NatNetTracker"/>
+            <Attribute name="natnetType" default="3dcloud" constant="true" displayName="Target Type" xsi:type="StringAttributeDeclarationType"/>
+        </DataflowConfiguration>
+    </Pattern>
+
 
 
     <!-- Attribute declarations -->
