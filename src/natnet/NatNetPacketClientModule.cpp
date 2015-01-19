@@ -552,7 +552,7 @@ static void memread(T& dest, const unsigned char*& ptr, const unsigned char*& en
         	std::stringstream msg;
             msg << "OptiTrackNatNet decode ERROR: end of message reached";
             if (fieldName) msg << " while reading " << fieldName << std::endl;
-            LOG4CPP_DEBUG( logger, msg );
+            LOG4CPP_DEBUG( logger, msg.str() );
             ptr = end;
         }
     }
@@ -581,7 +581,7 @@ static void memread(const char*& dest, const unsigned char*& ptr, const unsigned
         	std::stringstream msg;
             msg << "OptiTrackNatNet decode ERROR: end of message reached";
             if (fieldName) msg << " while reading string " << fieldName << std::endl;
-            LOG4CPP_DEBUG( logger, msg );
+            LOG4CPP_DEBUG( logger, msg.str() );
             ptr = end;
         }
     }
@@ -607,7 +607,7 @@ static void memread(const T*& dest, int n, const unsigned char*& ptr, const unsi
         	std::stringstream msg;
         	msg << "OptiTrackNatNet decode ERROR: end of message reached";
             if (fieldName) msg << " while reading " << n << " values for array " << fieldName << std::endl;
-            LOG4CPP_DEBUG( logger, msg );
+            LOG4CPP_DEBUG( logger, msg.str() );
             ptr = end;
         }
     }
@@ -631,7 +631,7 @@ static void memread(Ubitrack::Math::Vector< float, 3 >& dest, const unsigned cha
         	std::stringstream msg;
             msg << "OptiTrackNatNet decode ERROR: end of message reached";
             if (fieldName) msg << " while reading " << fieldName << std::endl;
-            LOG4CPP_DEBUG( logger, msg );
+            LOG4CPP_DEBUG( logger, msg.str() );
             ptr = end;
         }
     }
@@ -655,7 +655,7 @@ static void memread(Ubitrack::Math::Vector< float, 4 >& dest, const unsigned cha
         	std::stringstream msg;
             msg << "OptiTrackNatNet decode ERROR: end of message reached";
             if (fieldName) msg << " while reading " << fieldName << std::endl;
-            LOG4CPP_DEBUG( logger, msg );
+            LOG4CPP_DEBUG( logger, msg.str() );
             ptr = end;
         }
     }
@@ -683,7 +683,7 @@ static void memread(std::vector< Ubitrack::Math::Vector< float, 3 > >& dest, int
         	std::stringstream msg;
         	msg << "OptiTrackNatNet decode ERROR: end of message reached";
             if (fieldName) msg << " while reading " << n << " values for array " << fieldName << std::endl;
-            LOG4CPP_DEBUG( logger, msg );
+            LOG4CPP_DEBUG( logger, msg.str() );
             ptr = end;
         }
     }
