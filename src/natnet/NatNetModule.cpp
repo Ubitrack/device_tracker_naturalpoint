@@ -339,7 +339,7 @@ void NatNetModule::processFrame(sFrameOfMocapData* data)
 
 	// use synchronizer to correct timestamps
 	// XXX is this correct ??
-	timestamp = m_synchronizer.convertNativeToLocal( data->iFrame, timestamp );
+	//timestamp = m_synchronizer.convertNativeToLocal( data->fTimestamp, timestamp );
 
 	if ( m_running )
 	{
@@ -363,22 +363,9 @@ void NatNetModule::processFrame(sFrameOfMocapData* data)
 		    NatNetComponentKey key( id, NatNetComponentKey::target_6d );
 
 		    // check for non-recognized markers (all sub-markers are at (0,0,0))
-		    bool is_recognized = true;
-		    if (data->RigidBodies[i].nMarkers > 0) {
-			    if ((data->RigidBodies[i].Markers[0][0] == 0) &&
-			    	(data->RigidBodies[i].Markers[0][1] == 0) &&
-			    	(data->RigidBodies[i].Markers[0][2] == 0)) {
-					for (int j=1; j < data->RigidBodies[i].nMarkers; j++) {
-						if ((data->RigidBodies[i].Markers[j][0] == 0) && 
-							(data->RigidBodies[i].Markers[j][1] == 0) && 
-							(data->RigidBodies[i].Markers[j][2] == 0)) {
-							is_recognized = false;
-						}
-					}
-			    }
-		    }
+			bool is_recognized = data->RigidBodies[i].params & 0x01;
 
-		    if (!is_recognized) {
+			if (!is_recognized) {
 		    	continue;
 		    }
 
