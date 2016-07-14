@@ -32,6 +32,7 @@
 #include <utMath/Pose.h>
 #include <utMath/Matrix.h>
 #include <utUtil/OS.h>
+#include <utUtil/TracingProvider.h>
 #include <boost/array.hpp>
 
 #include <log4cpp/Category.hh>
@@ -382,6 +383,9 @@ void NatNetModule::processFrame(sFrameOfMocapData* data)
 
 		        //send it to the component
 				LOG4CPP_DEBUG( logger, "Sending pose for id " << id << " using " << getComponent( key )->getName() << ": " << pose << " mean error: " << data->RigidBodies[i].MeanError );
+#ifdef ENABLE_EVENT_TRACING
+				TRACEPOINT_MEASUREMENT_CREATE(getComponent( key )->getEventDomain(), timestamp, getComponent( key )->getName().c_str(), "PoseTracking")
+#endif
 				static_cast<NatNetRigidBodyReceiverComponent*>(getComponent( key ).get())->send( pose );
 		    }
 			else {
@@ -409,6 +413,9 @@ void NatNetModule::processFrame(sFrameOfMocapData* data)
 
 		        //send it to the component
 				LOG4CPP_DEBUG( logger, "Sending pose for id " << id << " using " << getComponent( key )->getName() << ": " << cloud );
+#ifdef ENABLE_EVENT_TRACING
+				TRACEPOINT_MEASUREMENT_CREATE(getComponent( key )->getEventDomain(), timestamp, getComponent( key )->getName().c_str(), "MarkerTracking")
+#endif
 				static_cast<NatNetPointCloudReceiverComponent*>(getComponent( key ).get())->send( pc );
 		    }
 			else {
